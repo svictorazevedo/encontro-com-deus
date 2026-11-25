@@ -13,7 +13,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icones/icone-192.png">
   <link rel="apple-touch-icon" href="icones/apple-touch-icon.png">
-  <link rel="stylesheet" href="style.css?v=2.0.0">
+  <link rel="stylesheet" href="style.css?v=2.1.0">
 </head>
 <body>
   <div class="app">
@@ -28,6 +28,7 @@
       <nav class="nav-topo" aria-label="Telas">
         <a href="#painel" data-tela="painel">Painel</a>
         <a href="#recepcao" data-tela="recepcao">Recepção</a>
+        <a href="#quartos" data-tela="quartos">Quartos</a>
         <a href="#ajustes" data-tela="ajustes">Ajustes</a>
       </nav>
       <div class="topo-acoes">
@@ -57,6 +58,8 @@
         <div id="listaRecepcao" class="lista"></div>
       </section>
 
+      <section id="tela-quartos" class="tela" hidden></section>
+
       <section id="tela-ajustes" class="tela" hidden></section>
     </main>
 
@@ -72,9 +75,9 @@
       <button class="fab" data-acao="novoCadastro" aria-label="Cadastrar">
         <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
       </button>
-      <a href="#naopagos" data-tela="naopagos">
-        <svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="13" rx="2"/><path d="M2 10h20M6 15h4"/></svg>
-        <span>Não pagos</span>
+      <a href="#quartos" data-tela="quartos">
+        <svg viewBox="0 0 24 24"><path d="M3 19V6M3 15h18v4M21 15v-3a3 3 0 0 0-3-3h-7v6"/><circle cx="7" cy="11" r="2"/></svg>
+        <span>Quartos</span>
       </a>
       <a href="#ajustes" data-tela="ajustes">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
@@ -99,6 +102,6 @@
   <div id="toasts" class="toasts" aria-live="polite"></div>
   <div id="sucesso" class="sucesso" hidden><div class="sucesso-circ"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div><div id="sucessoTxt"></div></div>
 
-  <script src="app.js?v=2.0.0"></script>
+  <script src="app.js?v=2.1.0"></script>
 </body>
 </html>

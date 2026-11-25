@@ -16,6 +16,15 @@ Um Apps Script instalado na própria planilha ([apps-script/Codigo.gs](apps-scri
   (com o total recebido), batizados e não batizados, quantidade por líder de célula e por discipulado.
   Variações do mesmo nome são agrupadas: acentos, maiúsculas, "Pr.", "Obr." etc.
   Cada número leva à lista correspondente.
+- **Quartos**: mapa do local por andar e ala (24 quartos + colchões avulsos + cozinha = 336 vagas), com
+  ocupação de cada quarto e vagas por sexo. Tocar num quarto mostra quem está nele e permite adicionar
+  (com busca e seleção múltipla), tirar pessoas e editar camas, sexo e observação.
+  **Distribuir automaticamente** coloca quem está sem quarto nas vagas livres:
+  - respeita o sexo do quarto;
+  - mantém o discipulado ou a célula juntos (configurável), com opção de separar equipe de encontristas;
+  - usa os quartos mistos e os colchões avulsos só depois; deixa a Cozinha de fora;
+  - mostra uma prévia antes e oferece "Desfazer".
+  Na recepção, o check-in já mostra o quarto ("Bem-vinda, Ana! · Quarto 03") e a ficha tem "Escolher/Trocar quarto".
 - **Ajustes**: conectar o aparelho (link de conexão), nome do aparelho/atendente, enviar o acesso para outro
   celular, instalar como app, configuração avançada (colunas, aba, valor do ingresso).
 
@@ -62,7 +71,15 @@ No pagamento, **Status** recebe "Pago". Cadastros feitos na recepção têm cód
 O link de conexão dá acesso aos dados dos inscritos (telefones e saúde). Envie só para a equipe.
 Cada aparelho guarda uma cópia dos dados para funcionar offline. Ao final do evento, use **Ajustes → Desconectar**.
 
+## Aba "Quartos"
+
+O app cria na planilha a aba **Quartos** (`Quarto`, `Andar`, `Ala`, `Camas`, `Sexo`, `Observação`) com o mapa padrão.
+Pode ser editada direto na planilha. Sexo vazio = misto. O quarto de cada pessoa fica na coluna **Quarto** da aba de inscritos.
+
 ## Versões
+
+- **2.1.0**: alocação de quartos (tela Quartos, distribuição automática, quarto no check-in, na ficha, no cadastro
+  e no painel). Apps Script ganhou `atualizarVarios` (gravação em lote), `garantirAba` e leitura de abas extras.
 
 - **2.0.0**: visual de aplicativo (barra inferior, folhas deslizantes, check-in com um toque e "Desfazer"),
   PWA instalável, fila offline, ficha da pessoa (Ligar/WhatsApp/saúde), link de conexão. O Apps Script passa a ficar

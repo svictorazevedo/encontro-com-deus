@@ -150,17 +150,36 @@ function executar_(p) {
   if (!p.chave || String(p.chave) !== chave_()) throw new Error('Chave de acesso inválida. Peça um novo link de conexão.');
 
   var ss = abrirPlanilha_(p.planilha);
+
+  if (p.acao === 'garantirAba') {
+    var l0 = LockService.getScriptLock();
+    l0.waitLock(25000);
+    try { return garantirAba_(ss, p); } finally { SpreadsheetApp.flush(); l0.releaseLock(); }
+  }
+
   var abas = ss.getSheets().map(function (s) { return s.getName(); });
   var sh = p.aba ? ss.getSheetByName(p.aba) : ss.getSheets()[0];
   if (!sh) throw new Error('Aba "' + p.aba + '" não encontrada. Abas: ' + abas.join(', '));
 
-  if (p.acao === 'ler') return ler_(ss, sh, abas);
+  if (p.acao === 'ler') {
+    var r = ler_(ss, sh, abas);
+    // Abas extras (ex.: "Quartos") vêm na mesma chamada, para o app carregar rápido.
+    r.outras = {};
+    (p.extras || []).forEach(function (nome) {
+      var s2 = ss.getSheetByName(nome);
+      if (!s2) { r.outras[nome] = null; return; }
+      var d2 = s2.getLastRow() ? s2.getDataRange().getDisplayValues() : [];
+      r.outras[nome] = { cabecalho: (d2[0] || []).map(function (h) { return String(h).trim(); }), linhas: d2.slice(1) };
+    });
+    return r;
+  }
 
   var lock = LockService.getScriptLock();
   lock.waitLock(25000);
   try {
     if (p.acao === 'garantirColunas') return { cabecalho: garantirColunas_(sh, p.colunas || []) };
     if (p.acao === 'atualizar') return atualizar_(sh, p);
+    if (p.acao === 'atualizarVarios') return atualizarVarios_(sh, p);
     if (p.acao === 'inserir') return inserir_(sh, p);
   } finally {
     SpreadsheetApp.flush();
@@ -229,6 +248,68 @@ function atualizar_(sh, p) {
     c.setValue(valores[k] == null ? '' : String(valores[k]));
   });
   return { linha: linha };
+}
+
+// Grava várias pessoas de uma vez (ex.: distribuição automática de quartos).
+// Lê e regrava só as colunas tocadas, numa única operação por coluna.
+function atualizarVarios_(sh, p) {
+  var itens = p.itens || [];
+  if (!itens.length) return { gravados: 0 };
+  var cols = {};
+  itens.forEach(function (it) { Object.keys(it.valores || {}).forEach(function (k) { cols[k] = true; }); });
+  var cab = garantirColunas_(sh, Object.keys(cols));
+  var ultima = sh.getLastRow();
+  if (ultima < 2) throw new Error('A planilha não tem registros.');
+  var n = ultima - 1;
+
+  var chaveCol = p.chaveColuna || (itens[0] && itens[0].chaveColuna);
+  var ci = chaveCol ? cab.indexOf(chaveCol) : -1;
+  var chaves = ci >= 0 ? sh.getRange(2, ci + 1, n, 1).getDisplayValues().map(function (r) { return String(r[0]).trim(); }) : null;
+
+  var colunas = {};
+  Object.keys(cols).forEach(function (k) {
+    colunas[k] = sh.getRange(2, cab.indexOf(k) + 1, n, 1).getDisplayValues();
+  });
+
+  var gravados = 0, naoAchados = [];
+  itens.forEach(function (it) {
+    var li = Number(it.linha) - 2;
+    if (chaves && it.chaveValor) {
+      var alvo = String(it.chaveValor).trim();
+      if (chaves[li] !== alvo) li = chaves.indexOf(alvo);
+    }
+    if (li < 0 || li >= n) { naoAchados.push(it.chaveValor || it.linha); return; }
+    Object.keys(it.valores || {}).forEach(function (k) {
+      colunas[k][li][0] = it.valores[k] == null ? '' : String(it.valores[k]);
+    });
+    gravados++;
+  });
+
+  Object.keys(colunas).forEach(function (k) {
+    var rg = sh.getRange(2, cab.indexOf(k) + 1, n, 1);
+    rg.setNumberFormat('@');
+    rg.setValues(colunas[k]);
+  });
+  return { gravados: gravados, naoAchados: naoAchados };
+}
+
+// Cria uma aba (ex.: "Quartos") com cabeçalho e linhas iniciais, se ainda não existir.
+function garantirAba_(ss, p) {
+  var nome = String(p.nome || '').trim();
+  if (!nome) throw new Error('Nome da aba não informado.');
+  var sh = ss.getSheetByName(nome);
+  if (sh && sh.getLastRow() > 0) return { criada: false };
+  if (!sh) sh = ss.insertSheet(nome);
+  var cab = p.cabecalho || [];
+  var linhas = p.linhas || [];
+  if (cab.length) sh.getRange(1, 1, 1, cab.length).setValues([cab]).setFontWeight('bold');
+  if (linhas.length) {
+    var rg = sh.getRange(2, 1, linhas.length, cab.length);
+    rg.setNumberFormat('@');
+    rg.setValues(linhas.map(function (l) { return cab.map(function (_, i) { return l[i] == null ? '' : String(l[i]); }); }));
+  }
+  sh.setFrozenRows(1);
+  return { criada: true };
 }
 
 function inserir_(sh, p) {

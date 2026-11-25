@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const VERSAO = '2.0.0';
+const VERSAO = '2.1.0';
 const K = { cfg: 'encontro.cfg.v1', demo: 'encontro.demo.v1', fila: 'encontro.fila.v1', cache: 'encontro.cache.v1' };
 const SITE = location.origin + location.pathname;
 
@@ -87,7 +87,21 @@ const SIS = {
   checkin: 'Check-in', checkinEm: 'Check-in em', checkinPor: 'Check-in por',
   pagoRec: 'Pago na recepção', valorRec: 'Valor recepção', pagoRecEm: 'Pago na recepção em',
   cadastroPor: 'Cadastrado na recepção por',
+  quarto: 'Quarto',
 };
+
+/* Quartos: aba própria na planilha (criada automaticamente com o mapa abaixo) */
+const ABA_Q = 'Quartos';
+const CAB_Q = ['Quarto', 'Andar', 'Ala', 'Camas', 'Sexo', 'Observação'];
+const QUARTOS_PADRAO = [
+  ...[[1, 12], [2, 14], [3, 14], [4, 14], [5, 14], [6, 14]].map(([n, c]) => [`Quarto ${String(n).padStart(2, '0')}`, 'Cima', 'Parte 1 (interno)', c, 'Feminino', `${c / 2} beliches`]),
+  ...[[7, 12], [8, 16], [9, 14]].map(([n, c]) => [`Quarto ${String(n).padStart(2, '0')}`, 'Cima', 'Corredor de fora', c, '', `${c / 2} beliches`]),
+  ...[[10, 14], [11, 14], [12, 14]].map(([n, c]) => [`Quarto ${n}`, 'Cima', 'Corredores do fundo', c, 'Masculino', `${c / 2} beliches`]),
+  ...[[13, 8], [14, 8], [15, 10], [16, 8], [17, 10], [18, 13]].map(([n, c]) => [`Quarto ${n}`, 'Baixo', 'Lado direito', c, 'Masculino', n === 18 ? '6 beliches + 1 cama' : `${c / 2} beliches`]),
+  ...[[19, 8], [20, 10], [21, 8], [22, 10], [23, 10], [24, 12]].map(([n, c]) => [`Quarto ${n}`, 'Baixo', 'Lado esquerdo', c, 'Feminino', `${c / 2} beliches`]),
+  ['Colchões avulsos', 'Extras', 'Colchões', 49, '', 'Colchões avulsos'],
+  ['Cozinha', 'Extras', 'Cozinha', 6, '', 'Equipe da cozinha (fora da distribuição automática)'],
+];
 const CATS = { encontrista: 'Encontrista', equipe: 'Equipe', anjo: 'Anjo', outro: 'Outro' };
 const COR_CAT = { encontrista: '#5b3fd1', equipe: '#0f8a7e', anjo: '#c9741a', outro: '#888' };
 const METODOS = ['Dinheiro', 'PIX', 'Cartão de débito', 'Cartão de crédito'];
@@ -100,6 +114,7 @@ const st = {
   filtro: 'todos', busca: '', limite: 80,
   painelGrupo: 'lider', painelCat: 'todos',
   instalar: null,
+  q: { cab: [], linhas: [], existe: false }, criandoQuartos: false,
 };
 
 /* ================= acesso à planilha ================= */
@@ -179,9 +194,12 @@ function montarPessoa(linha, i) {
     lider: g('lider'), discipulador: g('discipulador'), sexo: g('sexo'), nascimento: g('nascimento'),
     medicamento: g('medicamento'), alergia: g('alergia'), restricao: g('restricao'), emergencia: g('emergencia'),
     locomocao: g('locomocao'), primeiraVez: g('primeiraVez'), igreja: g('igreja'),
+    quarto: g('sis_quarto'),
   };
+  const nsx = norm(p.sexo);
+  p.sx = nsx.startsWith('f') ? 'f' : nsx.startsWith('m') ? 'm' : '';
   p.saude = [p.medicamento, p.alergia, p.restricao].some((v) => !negativo(v));
-  p.busca = norm([nome, p.comprador, codigo, p.lider, p.discipulador].join(' ')) + ' ' + celNacional(p.celular) + ' ' + celNacional(g('celularComprador'));
+  p.busca = norm([nome, p.comprador, codigo, p.lider, p.discipulador, p.quarto, rotuloQuarto(p.quarto)].join(' ')) + ' ' + celNacional(p.celular) + ' ' + celNacional(g('celularComprador'));
   return p;
 }
 
@@ -191,27 +209,36 @@ function reconstruir() {
 }
 
 /* --- operações locais (otimistas) --- */
-function garantirLocal(cols) {
-  for (const c of cols) if (c && !st.cab.includes(c)) { st.cab.push(c); st.linhas.forEach((l) => l.push('')); }
+function garantirEm(cab, linhas, cols) {
+  for (const c of cols) if (c && !cab.includes(c)) { cab.push(c); linhas.forEach((l) => l.push('')); }
+}
+function atualizarEm(cab, linhas, it) {
+  const v = it.valores || {};
+  garantirEm(cab, linhas, Object.keys(v));
+  let li = it.linha - 2;
+  const ci = cab.indexOf(it.chaveColuna);
+  if (ci >= 0 && it.chaveValor && String(linhas[li]?.[ci] ?? '').trim() !== it.chaveValor) {
+    li = linhas.findIndex((l) => String(l[ci] ?? '').trim() === it.chaveValor);
+  }
+  if (li < 0 || !linhas[li]) return;
+  for (const [k, val] of Object.entries(v)) linhas[li][cab.indexOf(k)] = String(val ?? '');
 }
 function aplicarLocal(op) {
-  const v = op.dados.valores || {};
-  garantirLocal(Object.keys(v));
-  if (op.acao === 'atualizar') {
-    let li = op.dados.linha - 2;
-    const ci = st.cab.indexOf(op.dados.chaveColuna);
-    if (ci >= 0 && op.dados.chaveValor && String(st.linhas[li]?.[ci] ?? '').trim() !== op.dados.chaveValor) {
-      li = st.linhas.findIndex((l) => String(l[ci] ?? '').trim() === op.dados.chaveValor);
-    }
-    if (li < 0 || !st.linhas[li]) return;
-    for (const [k, val] of Object.entries(v)) st.linhas[li][st.cab.indexOf(k)] = String(val ?? '');
-  } else if (op.acao === 'inserir') {
-    const ci = st.cab.indexOf(op.dados.chaveColuna);
-    if (ci >= 0 && st.linhas.some((l) => l[ci] === v[op.dados.chaveColuna])) return;
-    st.linhas.push(st.cab.map((h) => String(v[h] ?? '')));
-  } else if (op.acao === 'garantirColunas') {
-    garantirLocal(op.dados.colunas || []);
+  const d = op.dados;
+  if (op.acao === 'garantirAba') {
+    if (d.nome === ABA_Q && !st.q.existe) st.q = { cab: [...d.cabecalho], linhas: d.linhas.map((l) => l.map(String)), existe: true };
+    return;
   }
+  const t = d.aba === ABA_Q ? st.q : st;
+  if (op.acao === 'atualizar') atualizarEm(t.cab, t.linhas, d);
+  else if (op.acao === 'atualizarVarios') d.itens.forEach((it) => atualizarEm(t.cab, t.linhas, { chaveColuna: d.chaveColuna, ...it }));
+  else if (op.acao === 'inserir') {
+    const v = d.valores || {};
+    garantirEm(t.cab, t.linhas, Object.keys(v));
+    const ci = t.cab.indexOf(d.chaveColuna);
+    if (ci >= 0 && t.linhas.some((l) => l[ci] === v[d.chaveColuna])) return;
+    t.linhas.push(t.cab.map((h) => String(v[h] ?? '')));
+  } else if (op.acao === 'garantirColunas') garantirEm(t.cab, t.linhas, d.colunas || []);
 }
 
 function salvarCache() {
@@ -226,8 +253,19 @@ function usarBase(b) {
   st.abas = b.abas || [];
   st.planilha = b.planilha || '';
   st.aba = b.aba || '';
+  st.q = b.quartos && b.quartos.cabecalho && b.quartos.cabecalho.length
+    ? { cab: [...b.quartos.cabecalho], linhas: b.quartos.linhas.map((l) => [...l]), existe: true }
+    : { cab: [...CAB_Q], linhas: QUARTOS_PADRAO.map((l) => l.map(String)), existe: false };
   for (const op of st.fila) aplicarLocal(op);
   reconstruir();
+}
+
+// Na primeira vez, cria a aba "Quartos" na planilha com o mapa padrão.
+function garantirAbaQuartos() {
+  if (st.q.existe || st.criandoQuartos || !st.base) return;
+  if (st.fila.some((op) => op.acao === 'garantirAba')) return;
+  st.criandoQuartos = true;
+  enfileirar('garantirAba', { nome: ABA_Q, cabecalho: CAB_Q, linhas: QUARTOS_PADRAO.map((l) => l.map(String)) });
 }
 
 async function recarregar({ silencioso = false } = {}) {
@@ -236,11 +274,13 @@ async function recarregar({ silencioso = false } = {}) {
   if (st.fila.length && st.offline) { atualizarStatus(); return; }
   girar(true);
   try {
-    const r = await api('ler');
+    const r = await api('ler', { extras: [ABA_Q] });
     st.carregadoEm = new Date();
     st.erro = null;
     st.offline = false;
-    usarBase({ cabecalho: r.cabecalho || [], linhas: r.linhas || [], abas: r.abas, planilha: r.planilha, aba: r.aba });
+    usarBase({ cabecalho: r.cabecalho || [], linhas: r.linhas || [], abas: r.abas, planilha: r.planilha, aba: r.aba, quartos: (r.outras || {})[ABA_Q] || null });
+    if (st.q.existe) st.criandoQuartos = false;
+    else garantirAbaQuartos();
     if (r.planilha && cfg.nomePlanilha !== r.planilha) { cfg.nomePlanilha = r.planilha; salvarCfg(); }
     salvarCache();
   } catch (e) {
@@ -344,17 +384,18 @@ async function fazerCheckin(p) {
     if (!r) return;
     if (r.v === 'pagar') {
       atualizar(p, { ...valoresPagamento(r.dados.metodo, r.dados.valor), ...valoresCheckin(true) });
-      comemorar(`${primeiroNome(p)} pagou e entrou!`);
+      comemorar(`${primeiroNome(p)} pagou e entrou!${textoQuarto(p)}`);
       toast(`Pagamento (${r.dados.metodo}) + check-in de ${p.nome}`, 'ok', desfazerCom(p, { pag: true, chk: true }));
       return;
     }
   }
   atualizar(p, valoresCheckin(true));
-  comemorar(`Bem-vindo(a), ${primeiroNome(p)}!`);
-  toast(`Check-in de ${p.nome}`, 'ok', desfazerCom(p, { chk: true }));
+  comemorar(`Bem-vind${p.sx === 'f' ? 'a' : p.sx === 'm' ? 'o' : 'o(a)'}, ${primeiroNome(p)}!${textoQuarto(p)}`);
+  toast(`Check-in de ${p.nome}${p.quarto ? ' · ' + p.quarto : ''}`, 'ok', desfazerCom(p, { chk: true }));
   limparBuscaAposAcao();
 }
 const primeiroNome = (p) => p.nome.split(' ')[0];
+const textoQuarto = (p) => (p.quarto ? `\n${p.quarto}` : '\nSem quarto ainda');
 
 function desfazerCom(p, { pag, chk }) {
   return {
@@ -428,6 +469,7 @@ function linkWhats(cel, texto = '') {
 async function abrirFicha(p) {
   const id = idade(p.nascimento);
   const linhas = [
+    ['Quarto', p.quarto || 'Sem quarto', !p.quarto && !p.cancelado],
     ['Tipo', p.tipo || CATS[p.cat]],
     ['Celular', fmtCel(p.celular)],
     ['Líder de célula', p.lider && titulo(p.lider)],
@@ -455,6 +497,7 @@ async function abrirFicha(p) {
           ? `<button class="btn larga" value="descheckin">Desfazer check-in</button>`
           : `<button class="btn ok larga" value="checkin">✓ Fazer check-in</button>`}
         ${!p.pago && !p.cancelado ? `<button class="btn suave larga" value="pagar">Receber pagamento</button>` : ''}
+        ${p.cancelado ? '' : `<button class="btn larga" value="quarto">${p.quarto ? `Quarto: ${esc(p.quarto)} · trocar` : 'Escolher quarto'}</button>`}
         ${p.celular ? `<a class="btn" href="tel:+55${celNacional(p.celular)}">Ligar</a>` : ''}
         ${wa ? `<a class="btn" href="${wa}" target="_blank" rel="noopener">WhatsApp</a>` : ''}
       </div>
@@ -463,6 +506,7 @@ async function abrirFicha(p) {
   });
   if (r === 'checkin') return fazerCheckin(p);
   if (r === 'pagar') return receberPagamento(p);
+  if (r === 'quarto') return escolherQuarto(p);
   if (r === 'descheckin' && await confirmar('Desfazer check-in', `<p>Remover a presença de <b>${esc(p.nome)}</b>?</p>`, 'Desfazer check-in')) {
     atualizar(p, valoresCheckin(false)); toast('Check-in desfeito.');
   }
@@ -504,6 +548,10 @@ async function novoCadastro(nomeInicial = '') {
         <label class="campo">Restrição alimentar<input name="restricao"></label>
         <label class="campo">Contato de emergência (nome e telefone)<input name="emergencia"></label>
       </div></details>
+      <label class="campo">Quarto (opcional)<select name="quarto"><option value="">Definir depois</option>${(() => {
+        const oc = ocupacao();
+        return listaQuartos().map((q) => { const l = q.camas - ocupantesDe(q, oc).length; return `<option value="${esc(q.nome)}" ${l <= 0 ? 'disabled' : ''}>${esc(q.nome)} · ${SEXO_TXT[q.sx]} · ${l <= 0 ? 'lotado' : l + ' vaga(s)'}</option>`; }).join('');
+      })()}</select></label>
       <div><div class="rotulo-grupo">Pagamento</div>${radios('pagamento', [['', 'Não pagou'], ...METODOS.map((m) => [m, m])], '')}</div>
       <label class="campo">Valor (R$)<input name="valor" inputmode="decimal" value="${esc(cfg.valorPadrao)}"></label>
       <label class="interruptor">Já fazer check-in <input type="checkbox" name="checkin" checked></label>
@@ -546,6 +594,7 @@ async function novoCadastro(nomeInicial = '') {
     [colOuPadrao('emergencia')]: d.emergencia || '',
     [SIS.cadastroPor]: cfg.atendente || 'Recepção',
   };
+  if (d.quarto) v[SIS.quarto] = d.quarto;
   if (colNome('comprador')) v[colNome('comprador')] = nome;
   if (colNome('usado')) v[colNome('usado')] = 'Não Usado';
   if (d.pagamento) {
@@ -555,11 +604,368 @@ async function novoCadastro(nomeInicial = '') {
   }
   if (d.checkin) Object.assign(v, valoresCheckin(true));
   enfileirar('inserir', { valores: v, chaveColuna: colOuPadrao('codigo') });
-  comemorar(d.checkin ? `${nome.split(' ')[0]} cadastrado(a) e presente!` : 'Cadastro feito!');
+  comemorar((d.checkin ? `${nome.split(' ')[0]} cadastrado(a) e presente!` : 'Cadastro feito!') + (d.quarto ? `\n${d.quarto}` : ''));
   toast(`${nome} cadastrado(a)`, 'ok');
   if (telaAtual() !== 'recepcao') irPara('recepcao');
   st.busca = ''; $('#busca').value = ''; $('#limparBusca').hidden = true;
   renderRecepcao();
+}
+
+/* ================= quartos ================= */
+function rotuloQuarto(nome) {
+  if (!nome) return '';
+  const m = String(nome).match(/quarto\s*0*(\d+)/i);
+  if (m) return 'Q' + m[1].padStart(2, '0');
+  return String(nome).length > 12 ? String(nome).split(' ')[0] : String(nome);
+}
+const SEXO_TXT = { f: 'Feminino', m: 'Masculino', '': 'Misto' };
+const colQ = (k) => {
+  const alvo = { quarto: 'quarto', andar: 'andar', ala: 'ala', camas: 'camas', sexo: 'sexo', obs: 'observacao' }[k];
+  const i = st.q.cab.findIndex((h) => norm(h) === alvo || norm(h).startsWith(alvo));
+  return i >= 0 ? st.q.cab[i] : CAB_Q[['quarto', 'andar', 'ala', 'camas', 'sexo', 'obs'].indexOf(k)];
+};
+function listaQuartos() {
+  const ix = (k) => st.q.cab.indexOf(colQ(k));
+  const [iq, ia, il, ic, is, io] = ['quarto', 'andar', 'ala', 'camas', 'sexo', 'obs'].map(ix);
+  return st.q.linhas.map((l, i) => {
+    const nome = String(l[iq] ?? '').trim();
+    const sxn = norm(l[is]);
+    return {
+      nome, linha: i + 2, andar: String(l[ia] ?? '').trim(), ala: String(l[il] ?? '').trim(),
+      camas: Math.max(0, Math.round(numero(l[ic]))), sx: sxn.startsWith('f') ? 'f' : sxn.startsWith('m') ? 'm' : '',
+      obs: String(l[io] ?? '').trim(), cozinha: /cozinha/.test(norm(nome)),
+    };
+  }).filter((q) => q.nome);
+}
+const ativosComQuarto = () => st.pessoas.filter((p) => !p.cancelado && p.quarto);
+function ocupacao() {
+  const m = new Map();
+  for (const p of ativosComQuarto()) {
+    const k = norm(p.quarto);
+    if (!m.has(k)) m.set(k, []);
+    m.get(k).push(p);
+  }
+  return m;
+}
+const ocupantesDe = (q, oc = ocupacao()) => (oc.get(norm(q.nome)) || []).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+const acharQuarto = (nome) => listaQuartos().find((q) => norm(q.nome) === norm(nome));
+const corSexo = (sx) => (sx === 'f' ? '#d6457a' : sx === 'm' ? 'var(--azul)' : 'var(--muted)');
+
+function renderQuartos() {
+  const el = $('#tela-quartos');
+  if (!configurado()) { el.innerHTML = cartaoConectar(); return; }
+  if (!st.base) { el.innerHTML = esqueleto(); return; }
+  const qs = listaQuartos();
+  const oc = ocupacao();
+  const ativos = st.pessoas.filter((p) => !p.cancelado);
+  const cap = qs.reduce((s, q) => s + q.camas, 0);
+  const alocados = ativosComQuarto().length;
+  const sem = ativos.filter((p) => !p.quarto);
+  const nomesQ = new Set(qs.map((q) => norm(q.nome)));
+  const perdidos = ativosComQuarto().filter((p) => !nomesQ.has(norm(p.quarto)));
+  const vagas = (sx) => qs.filter((q) => q.sx === sx && !q.cozinha).reduce((s, q) => s + Math.max(0, q.camas - ocupantesDe(q, oc).length), 0);
+  const vagasMisto = vagas('');
+
+  const grupos = [];
+  for (const q of qs) {
+    const k = q.andar + '|' + q.ala;
+    let g = grupos.find((x) => x.k === k);
+    if (!g) grupos.push(g = { k, andar: q.andar, ala: q.ala, qs: [] });
+    g.qs.push(q);
+  }
+
+  el.innerHTML = `
+    ${!st.q.existe ? '<div class="aviso">Criando a aba "Quartos" na planilha com o mapa padrão…</div>' : ''}
+    ${perdidos.length ? `<div class="aviso erro">${perdidos.length} pessoa(s) estão num quarto que não existe no mapa (${esc([...new Set(perdidos.map((p) => p.quarto))].join(', '))}).</div>` : ''}
+    <div class="cartao">
+      <div class="hero">
+        <div class="anel" style="--p:${pct(alocados, cap)}"><div>${pct(alocados, cap)}%</div></div>
+        <div class="hero-txt">
+          <div class="muted peq">Camas ocupadas</div>
+          <div class="grande">${alocados}<span> de ${cap}</span></div>
+          <div class="muted peq">${sem.length} inscrito(s) sem quarto</div>
+        </div>
+      </div>
+      <div class="sexo-resumo">
+        <div><b style="color:${corSexo('f')}">Mulheres</b><span>${sem.filter((p) => p.sx === 'f').length} sem quarto</span><span>${vagas('f')} vagas femininas</span></div>
+        <div><b style="color:${corSexo('m')}">Homens</b><span>${sem.filter((p) => p.sx === 'm').length} sem quarto</span><span>${vagas('m')} vagas masculinas</span></div>
+        <div><b>Mistos/avulsos</b><span>${vagasMisto} vagas</span>${sem.filter((p) => !p.sx).length ? `<span class="txt-erro">${sem.filter((p) => !p.sx).length} sem sexo informado</span>` : ''}</div>
+      </div>
+      <div class="linha-botoes" style="margin-top:12px">
+        <button class="btn primario" data-acao="distribuir">Distribuir automaticamente</button>
+        ${sem.length ? `<button class="btn suave" data-ir-filtro="semquarto">Ver sem quarto (${sem.length})</button>` : ''}
+      </div>
+    </div>
+    ${grupos.map((g) => {
+      const camas = g.qs.reduce((s, q) => s + q.camas, 0);
+      const ocup = g.qs.reduce((s, q) => s + ocupantesDe(q, oc).length, 0);
+      const sxs = [...new Set(g.qs.map((q) => q.sx))];
+      return `<div class="secao">${esc(g.andar)}${g.ala ? ' · ' + esc(g.ala) : ''}
+          <span class="secao-dir">${sxs.length === 1 ? `<span style="color:${corSexo(sxs[0])}">${SEXO_TXT[sxs[0]]}</span> · ` : ''}${ocup}/${camas}</span></div>
+        <div class="quartos-grade">${g.qs.map((q) => {
+          const n = ocupantesDe(q, oc).length;
+          const livre = q.camas - n;
+          return `<button class="quarto ${livre <= 0 ? 'lotado' : ''}" data-quarto="${esc(q.nome)}">
+            <span class="q-topo"><b>${esc(q.nome)}</b><i style="background:${corSexo(q.sx)}" title="${SEXO_TXT[q.sx]}"></i></span>
+            <span class="q-num">${n}<small>/${q.camas}</small></span>
+            <span class="q-barra"><span style="width:${Math.min(100, pct(n, q.camas))}%;background:${livre < 0 ? 'var(--erro)' : corSexo(q.sx)}"></span></span>
+            <span class="q-st">${livre < 0 ? `${-livre} acima da capacidade` : livre === 0 ? 'Lotado' : `${livre} vaga${livre > 1 ? 's' : ''}`}</span>
+          </button>`;
+        }).join('')}</div>`;
+    }).join('')}
+    <div class="cartao linha-botoes" style="margin-top:20px">
+      <button class="btn" data-acao="novoQuarto">+ Novo quarto</button>
+      ${alocados ? '<button class="btn perigo" data-acao="limparQuartos">Tirar todos dos quartos</button>' : ''}
+    </div>`;
+}
+
+const respostaV = (r) => (r == null ? null : typeof r === 'string' ? r : r.v);
+
+async function abrirQuarto(nome) {
+  for (;;) {
+    const q = acharQuarto(nome);
+    if (!q) return;
+    const ocs = ocupantesDe(q);
+    const livre = q.camas - ocs.length;
+    const r = await folha({
+      titulo: q.nome,
+      corpo: `
+        <div class="muted peq">${esc([q.andar, q.ala, SEXO_TXT[q.sx], q.obs].filter(Boolean).join(' · '))}</div>
+        <div class="q-cab"><span class="q-num">${ocs.length}<small>/${q.camas}</small></span>
+          <span class="${livre < 0 ? 'txt-erro' : 'muted'}">${livre < 0 ? `${-livre} acima da capacidade` : livre === 0 ? 'Lotado' : `${livre} vaga(s)`}</span></div>
+        <button class="btn primario bloco" value="add">+ Adicionar pessoas</button>
+        <div class="ocupantes">${ocs.length ? ocs.map((p) => `
+          <div class="ocupante">
+            <button class="oc-nome" value="ficha:${p.linha}"><span class="avatar mini av-${p.cat}">${esc(iniciais(p.nome))}</span>
+              <span><b>${esc(p.nome)}</b><small>${esc([CATS[p.cat], p.sx && p.sx !== q.sx && q.sx ? '⚠ ' + SEXO_TXT[p.sx] : '', p.discipulador && 'Disc. ' + titulo(p.discipulador), p.checkin ? '✓ presente' : ''].filter(Boolean).join(' · '))}</small></span></button>
+            <button class="icone-btn" value="rem:${p.linha}" aria-label="Tirar do quarto"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+          </div>`).join('') : '<div class="vazio">Quarto vazio.</div>'}</div>
+        <details class="avancado"><summary>Editar quarto</summary>
+          <div class="form" style="margin-top:10px">
+            <div class="duas-col">
+              <label class="campo">Camas<input name="qcamas" inputmode="numeric" value="${q.camas}"></label>
+              <label class="campo">Sexo<select name="qsexo"><option value="">Misto</option><option ${q.sx === 'f' ? 'selected' : ''}>Feminino</option><option ${q.sx === 'm' ? 'selected' : ''}>Masculino</option></select></label>
+            </div>
+            <label class="campo">Observação<input name="qobs" value="${esc(q.obs)}"></label>
+            <button class="btn" value="salvarq">Salvar quarto</button>
+          </div></details>`,
+      ler: (f) => ({ camas: f.qcamas.value.trim(), sexo: f.qsexo.value, obs: f.qobs.value.trim() }),
+    });
+    const v = respostaV(r);
+    if (!v) return;
+    if (v === 'add') { await adicionarAoQuarto(q); continue; }
+    if (v.startsWith('rem:')) {
+      const p = acharPessoa(v.slice(4));
+      if (p) { atualizar(p, { [SIS.quarto]: '' }); toast(`${p.nome} saiu do ${q.nome}`, '', { rotulo: 'Desfazer', fn: () => atualizar(acharPessoaPorCodigo(p) || p, { [SIS.quarto]: q.nome }) }); }
+      continue;
+    }
+    if (v.startsWith('ficha:')) { const p = acharPessoa(v.slice(6)); if (p) abrirFicha(p); return; }
+    if (v === 'salvarq') {
+      enfileirar('atualizar', { aba: ABA_Q, linha: q.linha, chaveColuna: colQ('quarto'), chaveValor: q.nome,
+        valores: { [colQ('camas')]: String(Math.max(0, Math.round(numero(r.dados.camas)))), [colQ('sexo')]: r.dados.sexo, [colQ('obs')]: r.dados.obs } });
+      toast('Quarto atualizado.', 'ok');
+      continue;
+    }
+  }
+}
+
+async function adicionarAoQuarto(q) {
+  const livre = q.camas - ocupantesDe(q).length;
+  const cands = st.pessoas.filter((p) => !p.cancelado && !p.quarto)
+    .sort((a, b) => ((q.sx && b.sx === q.sx) - (q.sx && a.sx === q.sx)) || (b.checkin - a.checkin) || a.nome.localeCompare(b.nome, 'pt-BR'));
+  if (!cands.length) { toast('Todos os inscritos já têm quarto.'); return; }
+  const outros = q.sx ? cands.filter((p) => p.sx !== q.sx).length : 0;
+  const pr = folha({
+    titulo: `Adicionar ao ${q.nome}`,
+    corpo: `
+      <div class="campo-busca" style="margin-bottom:8px"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="selBusca" type="search" placeholder="Buscar nome, líder, discipulador" autocomplete="off"></div>
+      ${outros ? `<label class="interruptor" style="margin-bottom:8px">Mostrar ${q.sx === 'f' ? 'homens' : 'mulheres'} e sem sexo informado (${outros})<input type="checkbox" id="selOutros"></label>` : ''}
+      <div class="muted peq" id="selInfo" style="margin-bottom:6px"></div>
+      <div class="sel-lista">${cands.map((p) => `
+        <label class="sel-item" data-busca="${esc(p.busca)}" ${q.sx && p.sx !== q.sx ? 'data-outro hidden' : ''}>
+          <input type="checkbox" name="sel" value="${p.linha}">
+          <span class="avatar mini av-${p.cat}">${esc(iniciais(p.nome))}</span>
+          <span class="sel-txt"><b>${esc(p.nome)}</b><small>${esc([CATS[p.cat], SEXO_TXT[p.sx] !== 'Misto' ? SEXO_TXT[p.sx] : 'sexo não informado', p.discipulador && 'Disc. ' + titulo(p.discipulador), p.lider && 'Líder ' + titulo(p.lider), p.checkin ? '✓ presente' : ''].filter(Boolean).join(' · '))}</small></span>
+        </label>`).join('')}</div>`,
+    botoes: [{ v: 'ok', t: 'Alocar selecionados', cls: 'primario' }],
+    ler: (f) => $$('input[name=sel]:checked', f).map((i) => acharPessoa(i.value)).filter(Boolean),
+  });
+  const info = $('#selInfo');
+  const atualizarInfo = () => {
+    const n = $$('#folhaCorpo input[name=sel]:checked').length;
+    info.innerHTML = `${n} selecionado(s) · ${livre} vaga(s)${n > livre ? ' · <b class="txt-erro">passa da capacidade</b>' : ''}`;
+  };
+  const filtrarSel = () => {
+    const t = norm($('#selBusca').value);
+    const mostrarOutros = $('#selOutros') ? $('#selOutros').checked : true;
+    $$('#folhaCorpo .sel-item').forEach((el) => {
+      el.hidden = (el.hasAttribute('data-outro') && !mostrarOutros) || (t && !t.split(' ').every((w) => el.dataset.busca.includes(w)));
+    });
+  };
+  $('#selBusca').addEventListener('input', filtrarSel);
+  if ($('#selOutros')) $('#selOutros').addEventListener('change', filtrarSel);
+  $('#folhaCorpo').addEventListener('change', (e) => { if (e.target.name === 'sel') atualizarInfo(); });
+  atualizarInfo();
+  const r = await pr;
+  if (!r || r.v !== 'ok' || !r.dados.length) return;
+  const sel = r.dados;
+  if (sel.length > livre && !await confirmar('Passa da capacidade', `<p>O ${esc(q.nome)} tem ${livre} vaga(s) e você selecionou ${sel.length}. Alocar mesmo assim?</p>`, 'Alocar mesmo assim', 'primario')) return;
+  alocarVarios(sel.map((p) => [p, q.nome]));
+  toast(`${sel.length} pessoa(s) no ${q.nome}`, 'ok');
+}
+
+function alocarVarios(pares) {
+  if (!pares.length) return;
+  enfileirar('atualizarVarios', {
+    chaveColuna: colNome('codigo') || '',
+    itens: pares.map(([p, nome]) => ({ linha: p.linha, chaveValor: p.codigo, valores: { [SIS.quarto]: nome } })),
+  });
+}
+
+async function escolherQuarto(p) {
+  const qs = listaQuartos();
+  const oc = ocupacao();
+  const compat = (q) => !q.sx || !p.sx || q.sx === p.sx;
+  const ord = [...qs].sort((a, b) => (compat(b) - compat(a)));
+  const r = await folha({
+    titulo: p.quarto ? 'Trocar de quarto' : 'Escolher quarto',
+    corpo: `${cabecalhoPessoa(p)}
+      ${p.quarto ? `<button class="btn perigo bloco" value="tirar" style="margin-bottom:10px">Tirar do ${esc(p.quarto)}</button>` : ''}
+      <div class="quartos-grade">${ord.map((q, i) => {
+        const n = ocupantesDe(q, oc).length;
+        const livre = q.camas - n;
+        const atual = norm(q.nome) === norm(p.quarto);
+        return `<button class="quarto ${livre <= 0 ? 'lotado' : ''} ${atual ? 'atual' : ''} ${compat(q) ? '' : 'incompat'}" value="q:${qs.indexOf(q)}">
+          <span class="q-topo"><b>${esc(q.nome)}</b><i style="background:${corSexo(q.sx)}"></i></span>
+          <span class="q-st">${atual ? 'Quarto atual' : livre <= 0 ? 'Lotado' : `${livre} vaga${livre > 1 ? 's' : ''}`} · ${esc(SEXO_TXT[q.sx])}</span>
+        </button>${i < ord.length - 1 && compat(q) && !compat(ord[i + 1]) ? '</div><div class="secao">Outro sexo</div><div class="quartos-grade">' : ''}`;
+      }).join('')}</div>`,
+  });
+  const v = respostaV(r);
+  if (!v) return;
+  if (v === 'tirar') { atualizar(p, { [SIS.quarto]: '' }); toast(`${p.nome} sem quarto.`); return; }
+  const q = qs[+v.slice(2)];
+  if (!q || norm(q.nome) === norm(p.quarto)) return;
+  const livre = q.camas - ocupantesDe(q, oc).length;
+  if (livre <= 0 && !await confirmar('Quarto lotado', `<p>O ${esc(q.nome)} já está cheio. Colocar ${esc(p.nome)} mesmo assim?</p>`, 'Colocar mesmo assim', 'primario')) return;
+  if (!compat(q) && !await confirmar('Sexo diferente', `<p>O ${esc(q.nome)} é ${SEXO_TXT[q.sx].toLowerCase()}. Colocar ${esc(p.nome)} mesmo assim?</p>`, 'Colocar mesmo assim', 'primario')) return;
+  const antes = p.quarto;
+  atualizar(p, { [SIS.quarto]: q.nome });
+  comemorar(`${primeiroNome(p)} → ${q.nome}`);
+  toast(`${p.nome} no ${q.nome}`, 'ok', { rotulo: 'Desfazer', fn: () => atualizar(acharPessoaPorCodigo(p) || p, { [SIS.quarto]: antes || '' }) });
+}
+
+function planejarDistribuicao({ quem, juntos, separar }) {
+  const oc = ocupacao();
+  const quartos = listaQuartos().filter((q) => !q.cozinha).map((q) => {
+    const ocs = ocupantesDe(q, oc);
+    const sxOc = [...new Set(ocs.map((p) => p.sx).filter(Boolean))];
+    return { q, livre: q.camas - ocs.length, sx: q.sx || (sxOc.length === 1 ? sxOc[0] : '') };
+  });
+  const cands = st.pessoas.filter((p) => !p.cancelado && !p.quarto && (quem === 'todos' || p.checkin));
+  const semSexo = cands.filter((p) => !p.sx);
+  const plano = [], semVaga = [];
+  for (const sexo of ['f', 'm']) {
+    const ps = cands.filter((p) => p.sx === sexo);
+    const mapa = new Map();
+    for (const p of ps) {
+      let k = juntos === 'nenhum' ? '' : chaveNome(p[juntos]);
+      if (!k) k = '~' + (juntos === 'nenhum' ? 'todos' : 'sem');
+      if (separar) k += p.cat === 'equipe' ? '|eq' : '|en';
+      if (!mapa.has(k)) mapa.set(k, []);
+      mapa.get(k).push(p);
+    }
+    const grupos = [...mapa.values()].sort((a, b) => b.length - a.length);
+    for (const g of grupos) {
+      const resto = [...g].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+      while (resto.length) {
+        // 1º quartos do mesmo sexo (o grupo inteiro cabe? senão divide pelo quarto com mais vagas);
+        // 2º quartos mistos; colchões avulsos só por último.
+        const maior = (l) => [...l].sort((a, b) => b.livre - a.livre)[0];
+        const mesmo = quartos.filter((x) => x.sx === sexo && x.livre > 0);
+        const avulso = (x) => /colch|avuls/.test(norm(x.q.nome));
+        const mistos = quartos.filter((x) => !x.sx && x.livre > 0 && !avulso(x));
+        const avulsos = quartos.filter((x) => !x.sx && x.livre > 0 && avulso(x));
+        const r = mesmo.find((x) => x.livre >= resto.length) || maior(mesmo)
+          || mistos.find((x) => x.livre >= resto.length) || maior(mistos) || avulsos[0];
+        if (!r) { semVaga.push(...resto); break; }
+        const lote = resto.splice(0, Math.min(r.livre, resto.length));
+        lote.forEach((p) => plano.push([p, r.q.nome]));
+        r.livre -= lote.length;
+        if (!r.sx && !avulso(r)) r.sx = sexo; // quarto misto passa a ser deste sexo; colchões avulsos servem aos dois
+      }
+    }
+  }
+  return { plano, semVaga, semSexo, total: cands.length };
+}
+
+async function distribuir() {
+  const r = await folha({
+    titulo: 'Distribuir automaticamente',
+    corpo: `<div class="form">
+      <p class="muted" style="margin:0">Coloca quem está <b>sem quarto</b> nas vagas livres, respeitando o sexo de cada quarto. Quem já tem quarto não muda. A Cozinha fica de fora.</p>
+      <div><div class="rotulo-grupo">Quem distribuir</div>${radios('quem', [['todos', 'Todos os inscritos'], ['presentes', 'Só quem fez check-in']], 'todos')}</div>
+      <div><div class="rotulo-grupo">Manter juntos no mesmo quarto</div>${radios('juntos', [['discipulador', 'Discipulado'], ['lider', 'Célula (líder)'], ['nenhum', 'Tanto faz']], 'discipulador')}</div>
+      <label class="interruptor">Separar equipe de encontristas <input type="checkbox" name="separar"></label>
+    </div>`,
+    botoes: [{ v: 'ok', t: 'Ver prévia', cls: 'primario' }],
+    ler: (f) => ({ quem: f.quem.value, juntos: f.juntos.value, separar: f.separar.checked }),
+  });
+  if (!r || r.v !== 'ok') return;
+  const { plano, semVaga, semSexo, total } = planejarDistribuicao(r.dados);
+  if (!total) { toast('Ninguém sem quarto para distribuir.'); return; }
+  const porQuarto = new Map();
+  for (const [p, nome] of plano) { if (!porQuarto.has(nome)) porQuarto.set(nome, []); porQuarto.get(nome).push(p); }
+  const c = await folha({
+    titulo: 'Prévia da distribuição',
+    corpo: `
+      <div class="kpis" style="margin-bottom:12px">
+        ${kpi('Serão alocados', plano.length, `em ${porQuarto.size} quarto(s)`, 'ok')}
+        ${kpi('Ficam sem quarto', semVaga.length + semSexo.length, semSexo.length ? `${semSexo.length} sem sexo informado` : semVaga.length ? 'faltou vaga' : '—', semVaga.length + semSexo.length ? 'erro' : '')}
+      </div>
+      <div class="dados">${[...porQuarto.entries()].map(([nome, ps]) => `<div style="display:block"><b style="color:var(--txt)">${esc(nome)} <span class="muted">+${ps.length}</span></b>
+        <div class="muted peq">${ps.map((p) => esc(p.nome)).join(', ')}</div></div>`).join('') || '<div>Nenhuma vaga compatível.</div>'}</div>
+      ${semSexo.length ? `<div class="aviso">Sem sexo informado (aloque pela ficha): ${semSexo.map((p) => esc(p.nome)).join(', ')}</div>` : ''}
+      ${semVaga.length ? `<div class="aviso erro">Sem vaga: ${semVaga.map((p) => esc(p.nome)).join(', ')}</div>` : ''}`,
+    botoes: plano.length ? [{ v: 'ok', t: `Confirmar ${plano.length} alocações`, cls: 'primario' }] : [],
+  });
+  if (c !== 'ok') return;
+  alocarVarios(plano);
+  comemorar(`${plano.length} pessoas alocadas!`);
+  toast(`${plano.length} pessoas distribuídas em ${porQuarto.size} quartos`, 'ok', {
+    rotulo: 'Desfazer',
+    fn: () => alocarVarios(plano.map(([p]) => [acharPessoaPorCodigo(p) || p, ''])),
+  });
+}
+
+async function novoQuarto() {
+  const r = await folha({
+    titulo: 'Novo quarto',
+    corpo: `<div class="form">
+      <label class="campo">Nome<input name="nome" placeholder="Ex.: Quarto 25"></label>
+      <div class="duas-col"><label class="campo">Andar<input name="andar" placeholder="Cima, Baixo, Extras"></label><label class="campo">Ala<input name="ala"></label></div>
+      <div class="duas-col"><label class="campo">Camas<input name="camas" inputmode="numeric"></label>
+        <label class="campo">Sexo<select name="sexo"><option value="">Misto</option><option>Feminino</option><option>Masculino</option></select></label></div>
+      <label class="campo">Observação<input name="obs"></label></div>`,
+    botoes: [{ v: 'ok', t: 'Criar quarto', cls: 'primario' }],
+    ler: (f) => Object.fromEntries([...new FormData(f)].map(([k, v]) => [k, String(v).trim()])),
+    validar: (d) => (!d.nome ? 'Informe o nome.' : acharQuarto(d.nome) ? 'Já existe um quarto com esse nome.' : !(numero(d.camas) > 0) ? 'Informe o número de camas.' : ''),
+  });
+  if (!r) return;
+  const d = r.dados;
+  enfileirar('inserir', { aba: ABA_Q, chaveColuna: colQ('quarto'), valores: {
+    [colQ('quarto')]: d.nome, [colQ('andar')]: d.andar, [colQ('ala')]: d.ala, [colQ('camas')]: String(Math.round(numero(d.camas))), [colQ('sexo')]: d.sexo, [colQ('obs')]: d.obs,
+  } });
+  toast(`${d.nome} criado.`, 'ok');
+}
+
+async function limparQuartos() {
+  const com = ativosComQuarto();
+  if (!await confirmar('Tirar todos dos quartos', `<p>Remove o quarto de <b>${com.length} pessoa(s)</b>. O mapa de quartos continua. Use para refazer a distribuição.</p>`, 'Tirar todos')) return;
+  const antes = com.map((p) => [p, p.quarto]);
+  alocarVarios(com.map((p) => [p, '']));
+  toast('Todos sem quarto.', '', { rotulo: 'Desfazer', fn: () => alocarVarios(antes.map(([p, q]) => [acharPessoaPorCodigo(p) || p, q])) });
 }
 
 /* ================= painel ================= */
@@ -654,6 +1060,17 @@ function renderPainel() {
       ${kpi('Não batizados', nbat, `${pct(nbat, tot)}%${sbat ? ` · ${sbat} sem resposta` : ''}`, 'erro', 'naobat')}
     </div>
 
+    <div class="secao">Quartos</div>
+    <div class="kpis">
+      ${(() => {
+        const cap = listaQuartos().reduce((s, q) => s + q.camas, 0);
+        const com = n((p) => !!p.quarto);
+        return kpi('Com quarto', com, `${pct(com, tot)}% dos inscritos`, 'ok', 'comquarto') +
+          kpi('Sem quarto', tot - com, tot - com ? 'toque para ver' : 'todos alocados', tot - com ? 'erro' : '', 'semquarto') +
+          kpi('Vagas livres', Math.max(0, cap - com), `de ${cap} camas`, 'azul', 'tela:quartos');
+      })()}
+    </div>
+
     <div class="painel-grade" style="margin-top:20px">
       <div class="cartao">
         <div class="cartao-topo"><h2>Não pagos <span class="muted">(${naoPagos.length})</span></h2>
@@ -694,7 +1111,9 @@ const FILTROS = {
   'cat:encontrista': { t: 'Encontristas', f: (p) => p.cat === 'encontrista' && !p.cancelado },
   'cat:equipe': { t: 'Equipe', f: (p) => p.cat === 'equipe' && !p.cancelado },
   'cat:anjo': { t: 'Anjos', f: (p) => p.cat === 'anjo' && !p.cancelado },
+  semquarto: { t: 'Sem quarto', f: (p) => !p.quarto && !p.cancelado },
   saude: { t: 'Saúde ⚕', f: (p) => p.saude && !p.cancelado },
+  comquarto: { t: 'Com quarto', f: (p) => !!p.quarto && !p.cancelado, extra: true },
   pagos: { t: 'Pagos', f: (p) => p.pago, extra: true },
   app: { t: 'Pagos no app', f: (p) => p.pagoApp, extra: true },
   rec: { t: 'Pagos na recepção', f: (p) => p.pagoRec, extra: true },
@@ -721,6 +1140,7 @@ function selos(p, completo = false) {
   else if (p.pagoRec) s.push('<span class="selo alerta">Pago recepção</span>');
   else if (completo) s.push('<span class="selo ok">Pago no app</span>');
   if (p.checkin) s.push(`<span class="selo ok">Presente${p.checkinEm ? ' ' + esc(p.checkinEm.split(' ')[1] || '') : ''}</span>`);
+  if (p.quarto) s.push(`<span class="selo pri">🛏 ${esc(completo ? p.quarto : rotuloQuarto(p.quarto))}</span>`);
   if (p.saude) s.push('<span class="selo azul">⚕ Saúde</span>');
   return s.join('');
 }
@@ -922,7 +1342,7 @@ function folha({ titulo: t, corpo, botoes = [], ler: lerForm, validar }) {
     let dados = null;
     const aoEnviar = (e) => {
       const v = e.submitter ? e.submitter.value : 'cancelar';
-      if (v !== 'cancelar' && lerForm && botoes.some((b) => b.v === v)) {
+      if (v !== 'cancelar' && lerForm) {
         dados = lerForm(form);
         const erro = validar && validar(dados);
         if (erro) { e.preventDefault(); toast(erro, 'erro'); vibrar(80); return; }
@@ -996,7 +1416,7 @@ function atualizarStatus() {
 }
 
 /* ================= navegação ================= */
-const TELAS = ['painel', 'recepcao', 'ajustes'];
+const TELAS = ['painel', 'recepcao', 'quartos', 'ajustes'];
 function telaAtual() {
   const h = location.hash.slice(1);
   if (h === 'naopagos') return 'recepcao';
@@ -1015,6 +1435,7 @@ function renderizar() {
   atualizarStatus();
   if (t === 'painel') renderPainel();
   if (t === 'recepcao') renderRecepcao();
+  if (t === 'quartos') renderQuartos();
   if (t === 'ajustes') renderAjustes();
 }
 // Re-render sem atrapalhar quem está digitando ou com a folha aberta
@@ -1036,13 +1457,15 @@ window.addEventListener('hashchange', (e) => {
 
 /* ================= eventos ================= */
 document.addEventListener('click', async (e) => {
-  const alvo = e.target.closest('[data-checkin], [data-ficha], [data-filtro], [data-ir-filtro], [data-painel-grupo], [data-painel-cat], [data-acao]');
+  const alvo = e.target.closest('[data-checkin], [data-ficha], [data-filtro], [data-ir-filtro], [data-quarto], [data-painel-grupo], [data-painel-cat], [data-acao]');
   if (!alvo || alvo.closest('#folha')) return;
   const d = alvo.dataset;
   if (d.checkin) { e.stopPropagation(); const p = acharPessoa(d.checkin); if (p) fazerCheckin(p); return; }
   if (d.ficha) { const p = acharPessoa(d.ficha); if (p) abrirFicha(p); return; }
   if (d.filtro) { st.filtro = d.filtro; st.limite = 80; if (location.hash === '#naopagos') history.replaceState(null, '', '#recepcao'); renderizar(); return; }
+  if (d.irFiltro && d.irFiltro.startsWith('tela:')) { irPara(d.irFiltro.slice(5)); return; }
   if (d.irFiltro) { st.filtro = d.irFiltro; st.busca = ''; $('#busca').value = ''; irPara('recepcao'); return; }
+  if (d.quarto) { abrirQuarto(d.quarto); return; }
   if (d.painelGrupo) { st.painelGrupo = d.painelGrupo; renderPainel(); return; }
   if (d.painelCat) { st.painelCat = d.painelCat; renderPainel(); return; }
   switch (d.acao) {
@@ -1071,6 +1494,9 @@ document.addEventListener('click', async (e) => {
     case 'ativarDemo': cfg.demo = true; salvarCfg(); st.base = null; await recarregar(); irPara('painel'); toast('Modo demonstração: dados fictícios.'); break;
     case 'resetarDemo': localStorage.removeItem(K.demo); await recarregar(); toast('Dados fictícios recriados.', 'ok'); break;
     case 'desconectar': desconectar(); break;
+    case 'distribuir': distribuir(); break;
+    case 'novoQuarto': novoQuarto(); break;
+    case 'limparQuartos': limparQuartos(); break;
   }
 });
 
@@ -1115,7 +1541,7 @@ document.addEventListener('visibilitychange', () => {
 const Demo = {
   carregar() {
     const d = ler(K.demo, null);
-    if (d && d.cab) return d;
+    if (d && (d.cab || d.abas)) return d;
     const n = Demo.gerar();
     gravarLS(K.demo, n);
     return n;
@@ -1124,7 +1550,8 @@ const Demo = {
     let s = 7;
     const rnd = () => ((s = (s * 9301 + 49297) % 233280) / 233280);
     const pick = (a) => a[Math.floor(rnd() * a.length)];
-    const nomes = ['Ana', 'Bruno', 'Carla', 'Daniel', 'Elaine', 'Fábio', 'Gabriela', 'Henrique', 'Isabela', 'João', 'Karen', 'Lucas', 'Mariana', 'Nelson', 'Olívia', 'Paulo', 'Rafaela', 'Samuel', 'Tatiane', 'Vinícius', 'Yasmin', 'Rodrigo', 'Letícia', 'Mateus'];
+    const femininos = ['Ana', 'Carla', 'Elaine', 'Gabriela', 'Isabela', 'Karen', 'Mariana', 'Olívia', 'Rafaela', 'Tatiane', 'Yasmin', 'Letícia'];
+    const masculinos = ['Bruno', 'Daniel', 'Fábio', 'Henrique', 'João', 'Lucas', 'Nelson', 'Paulo', 'Samuel', 'Vinícius', 'Rodrigo', 'Mateus'];
     const sobren = ['Silva', 'Souza', 'Oliveira', 'Pereira', 'Costa', 'Rodrigues', 'Almeida', 'Nascimento', 'Lima', 'Araújo', 'Ferreira', 'Ribeiro'];
     const lideres = ['Marcos Teixeira', 'marcos teixeira ', 'Priscila Rocha', 'Renato Dias', 'Renato dias', 'Simone Prado', 'Tiago Mendes'];
     const discs = ['Pr. Eduardo Moura', 'Eduardo Moura', 'Cláudia Reis', 'claudia reis', 'Roberto Faria'];
@@ -1133,42 +1560,56 @@ const Demo = {
       'Já foi batizado numa igreja evangélica?', 'Essa é a sua primeira vez no Encontro com Deus?', 'Você faz uso de algum medicamento contínuo? Se sim, qual?',
       'Tem alguma alergia? Se sim, qual?', 'Possui alguma restrição alimentar? Se sim, qual', 'Contato de emergência (Nome e Telefone)'];
     const linhas = [];
-    for (let i = 0; i < 42; i++) {
-      const nome = `${pick(nomes)} ${pick(sobren)} ${pick(sobren)}`;
-      const tipo = i < 20 ? 'Encontrista | LOTE 1' : i < 37 ? 'Equipe | LOTE 1' : 'Anjo | LOTE 1';
+    for (let i = 0; i < 80; i++) {
+      const fem = rnd() < 0.5;
+      const nome = `${pick(fem ? femininos : masculinos)} ${pick(sobren)} ${pick(sobren)}`;
+      const tipo = i < 45 ? 'Encontrista | LOTE 1' : i < 72 ? 'Equipe | LOTE 1' : 'Anjo | LOTE 1';
       const r = rnd();
       const status = r < 0.12 ? 'Pendente' : 'Pago';
       const metodo = status === 'Pendente' ? 'PIX' : r < 0.7 ? 'PIX' : r < 0.93 ? 'Cartão de crédito' : 'Externo (Manual)';
       const cel = `+55659${String(Math.floor(rnd() * 1e8)).padStart(8, '0')}`;
       linhas.push(['Não Usado', Math.floor(rnd() * 0xfffff).toString(16).padStart(5, '0'), nome, 'exemplo' + i + '@exemplo.com', cel, tipo,
         `0${1 + (i % 5)}/06/2026 1${i % 10}:${String(i % 60).padStart(2, '0')}`, status, metodo, metodo.startsWith('Externo') ? '' : '145',
-        nome, `${String(1 + (i % 28)).padStart(2, '0')}/0${1 + (i % 9)}/19${70 + (i % 30)}`, rnd() < 0.5 ? 'Masculino' : 'Feminino', cel,
+        nome, `${String(1 + (i % 28)).padStart(2, '0')}/0${1 + (i % 9)}/19${70 + (i % 30)}`, fem ? 'Feminino' : 'Masculino', cel,
         pick(discs), pick(lideres),
         rnd() < 0.65 ? 'Sim, ja fui batizado em uma igreja evangélica' : 'Não sou batizado em igreja evangélica',
-        i < 20 ? 'Sim, é minha primeira vez' : 'Não, eu ja fui em outro encontro',
+        i < 45 ? 'Sim, é minha primeira vez' : 'Não, eu ja fui em outro encontro',
         rnd() < 0.85 ? 'Não' : 'Losartana', rnd() < 0.85 ? 'Não' : 'Dipirona', rnd() < 0.9 ? 'Não' : 'Lactose', 'Contato Exemplo 65 90000-0000']);
     }
     return { planilha: 'Demonstração (dados fictícios)', aba: 'Ingressos', cab, linhas };
   },
-  garantir(d, cols) { for (const c of cols) if (c && !d.cab.includes(c)) { d.cab.push(c); d.linhas.forEach((l) => l.push('')); } },
+  // Simula a planilha com várias abas: { planilha, aba (principal), abas: { nome: { cab, linhas } } }
   async api(acao, p) {
     await new Promise((r) => setTimeout(r, 120));
     const d = Demo.carregar();
-    if (acao === 'ler') return { ok: true, planilha: d.planilha, aba: d.aba, abas: [d.aba], cabecalho: [...d.cab], linhas: d.linhas.map((l) => [...l]) };
-    if (acao === 'garantirColunas') { Demo.garantir(d, p.colunas); gravarLS(K.demo, d); return { ok: true }; }
-    const v = p.valores || {};
-    Demo.garantir(d, Object.keys(v));
+    if (!d.abas) { d.abas = { [d.aba]: { cab: d.cab, linhas: d.linhas } }; delete d.cab; delete d.linhas; }
+    const salvar = () => gravarLS(K.demo, d);
+    if (acao === 'garantirAba') {
+      if (!d.abas[p.nome]) { d.abas[p.nome] = { cab: [...p.cabecalho], linhas: p.linhas.map((l) => l.map(String)) }; salvar(); }
+      return { ok: true };
+    }
+    const t = d.abas[p.aba || d.aba];
+    if (!t) throw new Error(`Aba "${p.aba}" não encontrada.`);
+    if (acao === 'ler') {
+      const outras = {};
+      for (const nome of p.extras || []) outras[nome] = d.abas[nome] ? { cabecalho: [...d.abas[nome].cab], linhas: d.abas[nome].linhas.map((l) => [...l]) } : null;
+      return { ok: true, planilha: d.planilha, aba: d.aba, abas: Object.keys(d.abas), cabecalho: [...t.cab], linhas: t.linhas.map((l) => [...l]), outras };
+    }
+    if (acao === 'garantirColunas') { garantirEm(t.cab, t.linhas, p.colunas); salvar(); return { ok: true }; }
     if (acao === 'atualizar') {
-      let li = p.linha - 2;
-      const ci = d.cab.indexOf(p.chaveColuna);
-      if (ci >= 0 && p.chaveValor && (!d.linhas[li] || d.linhas[li][ci] !== p.chaveValor)) li = d.linhas.findIndex((l) => l[ci] === p.chaveValor);
-      if (li < 0 || !d.linhas[li]) throw new Error('Registro não encontrado.');
-      for (const [k, val] of Object.entries(v)) d.linhas[li][d.cab.indexOf(k)] = String(val ?? '');
+      const ci = t.cab.indexOf(p.chaveColuna);
+      const li = ci >= 0 && p.chaveValor ? t.linhas.findIndex((l) => l[ci] === p.chaveValor) : p.linha - 2;
+      if (li < 0 || !t.linhas[li]) throw new Error('Registro não encontrado.');
+      atualizarEm(t.cab, t.linhas, p);
+    } else if (acao === 'atualizarVarios') {
+      p.itens.forEach((it) => atualizarEm(t.cab, t.linhas, { chaveColuna: p.chaveColuna, ...it }));
     } else if (acao === 'inserir') {
-      const ci = d.cab.indexOf(p.chaveColuna);
-      if (!(ci >= 0 && d.linhas.some((l) => l[ci] === v[p.chaveColuna]))) d.linhas.push(d.cab.map((h) => String(v[h] ?? '')));
+      const v = p.valores || {};
+      garantirEm(t.cab, t.linhas, Object.keys(v));
+      const ci = t.cab.indexOf(p.chaveColuna);
+      if (!(ci >= 0 && t.linhas.some((l) => l[ci] === v[p.chaveColuna]))) t.linhas.push(t.cab.map((h) => String(v[h] ?? '')));
     } else throw new Error('Ação desconhecida: ' + acao);
-    gravarLS(K.demo, d);
+    salvar();
     return { ok: true };
   },
 };
