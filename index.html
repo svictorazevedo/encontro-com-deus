@@ -2,164 +2,103 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Encontro com Deus — Painel e Recepção</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Encontro com Deus</title>
   <meta name="robots" content="noindex, nofollow">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%235b3fd1'/><path d='M14 7h4v7h7v4h-7v7h-4v-7H7v-4h7z' fill='white'/></svg>">
-  <link rel="stylesheet" href="style.css">
+  <meta name="theme-color" content="#5b3fd1">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Encontro">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icones/icone-192.png">
+  <link rel="apple-touch-icon" href="icones/apple-touch-icon.png">
+  <link rel="stylesheet" href="style.css?v=2.0.0">
 </head>
 <body>
-  <header class="topo">
-    <div class="marca">
-      <span class="logo" aria-hidden="true">✚</span>
-      <div>
-        <strong id="tituloEvento">Encontro com Deus</strong>
-        <small id="subtitulo">—</small>
+  <div class="app">
+    <header class="topo">
+      <div class="marca">
+        <img src="icones/icone-192.png" alt="" class="logo">
+        <div class="marca-txt">
+          <strong id="tituloEvento">Encontro com Deus</strong>
+          <button id="statusSync" class="sync" data-acao="sincronizar" title="Sincronização">—</button>
+        </div>
       </div>
-    </div>
-    <nav class="abas" aria-label="Telas">
-      <a href="#painel" data-tela="painel">Painel</a>
-      <a href="#recepcao" data-tela="recepcao">Recepção</a>
-      <a href="#config" data-tela="config">Configuração</a>
-    </nav>
-  </header>
+      <nav class="nav-topo" aria-label="Telas">
+        <a href="#painel" data-tela="painel">Painel</a>
+        <a href="#recepcao" data-tela="recepcao">Recepção</a>
+        <a href="#ajustes" data-tela="ajustes">Ajustes</a>
+      </nav>
+      <div class="topo-acoes">
+        <button class="icone-btn" data-acao="recarregar" title="Atualizar agora" aria-label="Atualizar agora">
+          <svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5"/></svg>
+        </button>
+        <button class="btn primario so-pc" data-acao="novoCadastro">+ Cadastrar</button>
+      </div>
+    </header>
 
-  <div id="faixaDemo" class="faixa-demo" hidden>
-    Modo demonstração — dados fictícios guardados só neste navegador.
-    <a href="#config">Conectar à planilha</a>
+    <div id="faixaDemo" class="faixa" hidden>Modo demonstração · dados fictícios <a href="#ajustes">Conectar planilha</a></div>
+    <div id="faixaOffline" class="faixa offline" hidden>Sem internet — as ações ficam guardadas e serão enviadas quando a conexão voltar.</div>
+
+    <main id="conteudo">
+      <section id="tela-painel" class="tela" hidden></section>
+
+      <section id="tela-recepcao" class="tela" hidden>
+        <div class="recepcao-topo">
+          <div class="campo-busca">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input id="busca" type="search" placeholder="Nome, código, celular ou líder" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="search">
+            <button id="limparBusca" class="limpar" aria-label="Limpar busca" hidden>×</button>
+          </div>
+          <div class="chips rolavel" id="filtrosRecepcao"></div>
+          <div class="progresso-linha" id="progressoPresenca"></div>
+        </div>
+        <div id="listaRecepcao" class="lista"></div>
+      </section>
+
+      <section id="tela-ajustes" class="tela" hidden></section>
+    </main>
+
+    <nav class="nav-baixo" aria-label="Telas">
+      <a href="#painel" data-tela="painel">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+        <span>Painel</span>
+      </a>
+      <a href="#recepcao" data-tela="recepcao">
+        <svg viewBox="0 0 24 24"><path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg>
+        <span>Recepção</span>
+      </a>
+      <button class="fab" data-acao="novoCadastro" aria-label="Cadastrar">
+        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+      <a href="#naopagos" data-tela="naopagos">
+        <svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="13" rx="2"/><path d="M2 10h20M6 15h4"/></svg>
+        <span>Não pagos</span>
+      </a>
+      <a href="#ajustes" data-tela="ajustes">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+        <span>Ajustes</span>
+      </a>
+    </nav>
   </div>
 
-  <main>
-    <!-- ================= PAINEL ================= -->
-    <section id="tela-painel" class="tela" hidden>
-      <div class="barra">
-        <h1>Painel</h1>
-        <div class="barra-acoes">
-          <span id="atualizadoEm" class="muted"></span>
-          <button class="btn" data-acao="recarregar">Atualizar</button>
-        </div>
+  <!-- Folha (bottom sheet no celular, janela no PC) -->
+  <dialog id="folha" class="folha">
+    <form method="dialog" id="folhaForm" novalidate>
+      <div class="folha-alca" aria-hidden="true"></div>
+      <div class="folha-topo">
+        <h2 id="folhaTitulo"></h2>
+        <button type="button" class="icone-btn" id="fecharFolha" aria-label="Fechar"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
       </div>
-      <div id="painelConteudo"></div>
-    </section>
-
-    <!-- ================= RECEPÇÃO ================= -->
-    <section id="tela-recepcao" class="tela" hidden>
-      <div class="barra">
-        <h1>Recepção</h1>
-        <div class="barra-acoes">
-          <span id="contadorPresenca" class="pill"></span>
-          <button class="btn" data-acao="recarregar">Atualizar</button>
-          <button class="btn primario" data-acao="novoCadastro">+ Cadastrar</button>
-        </div>
-      </div>
-      <div class="busca">
-        <input id="busca" type="search" placeholder="Buscar por nome, código, celular, líder…" autocomplete="off">
-      </div>
-      <div class="chips" id="filtrosRecepcao">
-        <button class="chip ativo" data-filtro="todos">Todos</button>
-        <button class="chip" data-filtro="semcheckin">Sem check-in</button>
-        <button class="chip" data-filtro="presentes">Presentes</button>
-        <button class="chip" data-filtro="naopagos">Não pagos</button>
-        <span class="sep"></span>
-        <button class="chip" data-filtro="cat:encontrista">Encontristas</button>
-        <button class="chip" data-filtro="cat:equipe">Equipe</button>
-        <button class="chip" data-filtro="cat:anjo">Anjos</button>
-      </div>
-      <div id="listaRecepcao" class="lista"></div>
-    </section>
-
-    <!-- ================= CONFIGURAÇÃO ================= -->
-    <section id="tela-config" class="tela" hidden>
-      <div class="barra"><h1>Configuração</h1></div>
-
-      <div class="cartao">
-        <h2>1. Conexão com a planilha</h2>
-        <p class="muted">A planilha fica no seu Google Drive. Envie o .xlsx exportado para o Drive e abra-o como
-          <em>Planilhas Google</em> (Arquivo → Salvar como Planilhas Google). Depois cole o link aqui.</p>
-        <form id="formConfig" class="grade-form">
-          <label class="col-2">Link (ou ID) da planilha Google
-            <input name="planilha" placeholder="https://docs.google.com/spreadsheets/d/…/edit" required>
-          </label>
-          <label>Aba
-            <select name="aba"><option value="">(primeira aba)</option></select>
-          </label>
-          <label class="col-2">URL do Apps Script (App da Web)
-            <input name="url" placeholder="https://script.google.com/macros/s/…/exec" required>
-          </label>
-          <label>Chave de acesso
-            <input name="chave" type="password" autocomplete="off" required>
-          </label>
-          <label>Nome do evento (título)
-            <input name="evento" placeholder="Encontro com Deus">
-          </label>
-          <label>Atendente / dispositivo
-            <input name="atendente" placeholder="Ex.: Recepção mesa 1">
-          </label>
-          <label>Valor padrão do ingresso (R$)
-            <input name="valorPadrao" inputmode="decimal" placeholder="145">
-          </label>
-          <label class="col-3">Métodos de pagamento da planilha que contam como "pago na recepção" (separe por vírgula)
-            <input name="metodosRecepcao" placeholder="Externo, Manual, Dinheiro">
-          </label>
-          <div class="col-3 linha-botoes">
-            <button class="btn primario" type="submit">Salvar e testar conexão</button>
-            <span id="statusConexao" class="muted"></span>
-          </div>
-        </form>
-      </div>
-
-      <div class="cartao" id="cartaoMapa">
-        <h2>2. Colunas da planilha</h2>
-        <p class="muted">O sistema reconhece as colunas automaticamente pelo nome. Ajuste aqui se a planilha usar outro nome.
-          As colunas de controle (check-in e pagamento na recepção) são criadas automaticamente no fim da planilha na primeira gravação.</p>
-        <div id="mapaColunas" class="grade-form"></div>
-        <div class="linha-botoes">
-          <button class="btn" data-acao="salvarMapa">Salvar colunas</button>
-          <button class="btn" data-acao="prepararColunas">Criar colunas de controle agora</button>
-        </div>
-      </div>
-
-      <div class="cartao">
-        <h2>3. Instalar o Apps Script (uma vez)</h2>
-        <ol class="passos">
-          <li>Entre em <a href="https://script.google.com" target="_blank" rel="noopener">script.google.com</a> com a conta dona da planilha → <strong>Novo projeto</strong>.</li>
-          <li>Apague o conteúdo e cole o código abaixo. Troque <code>TROQUE-ESTA-CHAVE</code> por uma senha sua e salve.</li>
-          <li><strong>Implantar → Nova implantação → App da Web</strong>. Executar como: <em>Eu</em>. Quem pode acessar: <em>Qualquer pessoa</em>.</li>
-          <li>Autorize, copie a URL que termina em <code>/exec</code> e cole acima, junto com a chave.</li>
-        </ol>
-        <div class="linha-botoes">
-          <button class="btn" data-acao="copiarScript">Copiar código do Apps Script</button>
-          <a class="btn" href="apps-script/Codigo.gs" target="_blank" rel="noopener">Abrir arquivo</a>
-        </div>
-        <details><summary>Ver código</summary><pre id="codigoScript" class="codigo">Carregando…</pre></details>
-      </div>
-
-      <div class="cartao">
-        <h2>Demonstração</h2>
-        <p class="muted">Quer ver funcionando antes de conectar? Use dados fictícios (ficam só neste navegador).</p>
-        <div class="linha-botoes">
-          <button class="btn" data-acao="ativarDemo">Usar dados de demonstração</button>
-          <button class="btn" data-acao="resetarDemo">Recriar dados de demonstração</button>
-          <button class="btn perigo" data-acao="esquecerConfig">Apagar configuração deste navegador</button>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <dialog id="modal">
-    <form method="dialog" id="modalForm">
-      <div class="modal-topo">
-        <h2 id="modalTitulo"></h2>
-        <button class="fechar" value="cancelar" formnovalidate aria-label="Fechar">×</button>
-      </div>
-      <div id="modalCorpo"></div>
-      <div id="modalBotoes" class="linha-botoes fim"></div>
+      <div id="folhaCorpo" class="folha-corpo"></div>
+      <div id="folhaBotoes" class="folha-botoes"></div>
     </form>
   </dialog>
 
-  <div id="carregando" class="carregando" hidden><span class="giro"></span> <span id="carregandoTexto">Carregando…</span></div>
   <div id="toasts" class="toasts" aria-live="polite"></div>
+  <div id="sucesso" class="sucesso" hidden><div class="sucesso-circ"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div><div id="sucessoTxt"></div></div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=2.0.0"></script>
 </body>
 </html>

@@ -1,29 +1,42 @@
 # Encontro com Deus — Painel e Recepção
 
-Site estático (roda no **GitHub Pages**) cujo banco de dados é uma **planilha Google** no Drive.
-Uma pequena "ponte" em Google Apps Script ([apps-script/Codigo.gs](apps-script/Codigo.gs)) lê e grava na planilha.
+App web (roda no **GitHub Pages**, instalável no celular) cujo banco de dados é uma **planilha Google** no Drive.
+Um Apps Script instalado na própria planilha ([apps-script/Codigo.gs](apps-script/Codigo.gs)) faz a ponte.
+
+**Endereço:** https://svictorazevedo.github.io/encontro-com-deus/
 
 ## Telas
 
-- **Painel** — encontristas, equipe, anjos, presentes; pagos / não pagos (com lista de nomes);
-  pagos no app / pagos na recepção; batizados / não batizados; quantidade por líder de célula e por discipulado
-  (variações do mesmo nome são agrupadas: acentos, maiúsculas, "Pr.", "Obr." etc.). Atualiza sozinho a cada 45 s.
-- **Recepção** — busca por nome, código, celular ou líder; check-in (Enter faz check-in quando só sobra 1 resultado);
-  receber pagamento (dinheiro, PIX, cartão); desfazer check-in/pagamento; cadastrar encontrista/equipe/anjo na hora;
-  detalhes (medicamento, alergia, restrição alimentar, contato de emergência).
-- **Configuração** — link da planilha, aba, URL do Apps Script, chave, nome do atendente, valor padrão,
-  mapeamento de colunas e modo demonstração.
+- **Recepção**: busca instantânea (nome, código, celular, líder) e check-in com um toque. Se a pessoa não pagou,
+  oferece receber na hora. Mostra uma confirmação grande e um botão "Desfazer" por alguns segundos.
+  Tocar numa pessoa abre a ficha: dados, saúde em destaque, Ligar, WhatsApp, receber pagamento e desfazer check-in.
+  Filtros com contagem: sem check-in, presentes, não pagos, encontristas, equipe, anjos e saúde.
+- **Cadastrar** (botão +): encontrista, equipe ou anjo, com pagamento e check-in na hora.
+- **Painel**: presença (anel), encontristas, equipe, anjos, pagos e não pagos (com lista), pagos no app e na recepção
+  (com o total recebido), batizados e não batizados, quantidade por líder de célula e por discipulado.
+  Variações do mesmo nome são agrupadas: acentos, maiúsculas, "Pr.", "Obr." etc.
+  Cada número leva à lista correspondente.
+- **Ajustes**: conectar o aparelho (link de conexão), nome do aparelho/atendente, enviar o acesso para outro
+  celular, instalar como app, configuração avançada (colunas, aba, valor do ingresso).
 
-## Como colocar no ar
+## Pensado para o celular
 
-1. **Planilha**: envie o `.xlsx` exportado para o Google Drive e abra como Planilhas Google
-   (Arquivo → Salvar como Planilhas Google).
-2. **Apps Script**: em [script.google.com](https://script.google.com) → Novo projeto → cole `apps-script/Codigo.gs`,
-   troque `TROQUE-ESTA-CHAVE` por uma senha → Implantar → Nova implantação → **App da Web**
-   (Executar como: *Eu*; Quem pode acessar: *Qualquer pessoa*) → copie a URL `/exec`.
-3. **Site**: publique este repositório no GitHub Pages (Settings → Pages → branch `main`, pasta `/`).
-4. Abra o site → **Configuração** → cole o link da planilha, a URL do Apps Script e a chave → *Salvar e testar*.
-   Faça isso em cada celular/computador da recepção (a configuração fica salva no navegador).
+- Instalável (PWA): ícone na tela inicial, abre em tela cheia, abre mesmo sem internet.
+- **Funciona com internet ruim:** cada ação aparece na hora e vai para uma fila que envia à planilha quando dá.
+  O status no topo mostra se está sincronizado, enviando ou sem internet.
+- Atualiza sozinho a cada 30 s, para ver o trabalho das outras mesas e as novas compras no app.
+- No PC vira layout de site, com navegação no topo e a lista em grade.
+
+## Como colocar no ar (uma vez)
+
+1. Planilha: envie o `.xlsx` exportado ao Google Drive e abra como Planilhas Google.
+2. Na planilha, abra **Extensões → Apps Script**, cole `apps-script/Codigo.gs` e salve.
+3. **Implantar → Nova implantação → App da Web** (Executar como: *Eu*; Quem pode acessar: *Qualquer pessoa*) → autorize.
+4. Recarregue a planilha. No menu **Encontro com Deus → Conectar celulares**, copie ou envie por WhatsApp o
+   **link de conexão** e abra-o em cada aparelho da recepção.
+
+A chave de acesso é gerada sozinha. Para cortar o acesso de todos os aparelhos, use
+**Encontro com Deus → Trocar chave de acesso** e envie o novo link.
 
 ## Regras de contagem
 
@@ -31,25 +44,27 @@ Uma pequena "ponte" em Google Apps Script ([apps-script/Codigo.gs](apps-script/C
 |---|---|
 | Encontrista / Equipe / Anjo | coluna **Tipo** contém "Encontrista", "Equipe" ou "Anjo" |
 | Pago | **Status** = Pago/Aprovado, ou pagamento registrado na recepção |
-| Pago na recepção | coluna *Pago na recepção* preenchida, ou **Método de pagamento** contém um dos termos configurados (padrão: Externo, Manual, Dinheiro) |
+| Pago na recepção | coluna *Pago na recepção* preenchida, ou **Método** contém um termo configurado (padrão: Externo, Manual, Dinheiro) |
 | Pago no app | pago e não é recepção |
 | Batizado | resposta começa com "Sim" |
 | Presente | coluna *Check-in* = Sim, ou **Usado** = Usado |
-| Cancelado | Status com cancelado/estornado/reembolsado — fica fora de todas as contas |
+| Saúde ⚕ | medicamento, alergia ou restrição alimentar preenchidos com algo diferente de "não" |
+| Cancelado | Status cancelado/estornado/reembolsado: fica fora de todas as contas |
 
-## Colunas criadas pelo sistema
+## O que o app grava na planilha
 
-Na primeira gravação o sistema acrescenta no fim da planilha: `Check-in`, `Check-in em`, `Check-in por`,
-`Pago na recepção`, `Valor recepção`, `Pago na recepção em`, `Cadastrado na recepção por`.
-No check-in também marca a coluna **Usado** como "Usado"; no pagamento muda **Status** para "Pago".
-Cadastros feitos na recepção recebem código começando com `R` e Tipo `… | Recepção`.
+Colunas criadas no fim: `Check-in`, `Check-in em`, `Check-in por`, `Pago na recepção`, `Valor recepção`,
+`Pago na recepção em`, `Cadastrado na recepção por`. No check-in, a coluna **Usado** recebe "Usado".
+No pagamento, **Status** recebe "Pago". Cadastros feitos na recepção têm código começando com `R` e Tipo `… | Recepção`.
 
 ## Segurança
 
-A URL do Apps Script + a chave dão acesso aos dados (incluindo telefones e informações de saúde).
-Compartilhe só com a equipe da recepção. Para trocar a chave, altere `CHAVE_PADRAO` (ou a propriedade
-do script `CHAVE`) e publique nova versão da implantação.
+O link de conexão dá acesso aos dados dos inscritos (telefones e saúde). Envie só para a equipe.
+Cada aparelho guarda uma cópia dos dados para funcionar offline. Ao final do evento, use **Ajustes → Desconectar**.
 
 ## Versões
 
-- **1.0.0** — Painel, Recepção (check-in, pagamento, cadastro), Configuração, modo demonstração.
+- **2.0.0**: visual de aplicativo (barra inferior, folhas deslizantes, check-in com um toque e "Desfazer"),
+  PWA instalável, fila offline, ficha da pessoa (Ligar/WhatsApp/saúde), link de conexão. O Apps Script passa a ficar
+  preso à planilha, com menu próprio, chave automática e geração do link.
+- **1.0.0**: Painel, Recepção (check-in, pagamento, cadastro), Configuração, modo demonstração.
