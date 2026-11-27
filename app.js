@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const VERSAO = '3.1.1';
+const VERSAO = '3.1.2';
 const K = { cfg: 'encontro.cfg.v1', demo: 'encontro.demo.v1', fila: 'encontro.fila.v1', cache: 'encontro.cache.v1', local: 'encontro.local.v1' };
 const SITE = location.origin + location.pathname;
 
@@ -59,19 +59,19 @@ const configurado = () => cfg.demo || cfg.local || !!cfg.ev || !!(cfg.url && cfg
 const semNuvem = () => cfg.demo || cfg.local; // dados só no aparelho
 
 const CAMPOS = [
-  { k: 'codigo', nome: 'Código', re: /^codigo$/ },
+  { k: 'codigo', nome: 'Código', re: /^(codigo|ingresso|codigo do ingresso|id do ingresso)$/ },
   { k: 'usado', nome: 'Usado', re: /^usado$/ },
   { k: 'nome', nome: 'Nome Completo', re: /^(nome completo|nome|participante|nome do participante|nome completo do participante|inscrito|nome do inscrito|encontrista)$/ },
   { k: 'comprador', nome: 'Comprador', re: /^comprador$/ },
-  { k: 'tipo', nome: 'Tipo', re: /^(tipo|lote|categoria|tipo de ingresso|ingresso)$/ },
-  { k: 'status', nome: 'Status', re: /^status$/ },
+  { k: 'tipo', nome: 'Tipo', re: /^(tipo|lote|categoria|tipo de ingresso)$/ },
+  { k: 'status', nome: 'Status', re: /^(status|situacao|status do pagamento|situacao do pagamento)$/ },
   { k: 'metodo', nome: 'Método de pagamento', re: /metodo de pagamento|forma de pagamento/ },
   { k: 'preco', nome: 'Preço do Ingresso', re: /preco|valor do ingresso/ },
   { k: 'dataCompra', nome: 'Data da Compra', re: /data da compra/ },
-  { k: 'celular', nome: 'Celular', re: /^(celular|telefone|whatsapp|celular do participante|telefone do participante)$/ },
+  { k: 'celular', nome: 'Celular', re: /^(celular|telefone|whatsapp|contato celular|celular do participante|telefone do participante)$/ },
   { k: 'celularComprador', nome: 'Celular do comprador', re: /celular do comprador/ },
   { k: 'emailComprador', nome: 'E-mail do comprador', re: /e ?mail/ },
-  { k: 'igreja', nome: 'Igreja do comprador', re: /igreja do comprador/ },
+  { k: 'igreja', nome: 'Igreja do comprador', re: /igreja do comprador|^qual igreja$|^igreja$/ },
   { k: 'nascimento', nome: 'Data de Nascimento', re: /nascimento/ },
   { k: 'sexo', nome: 'Sexo', re: /^sexo$/ },
   { k: 'discipulador', nome: 'Qual o nome do seu discipulador?', re: /discipulador/ },
