@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const VERSAO = '2.1.0';
+const VERSAO = '2.1.1';
 const K = { cfg: 'encontro.cfg.v1', demo: 'encontro.demo.v1', fila: 'encontro.fila.v1', cache: 'encontro.cache.v1' };
 const SITE = location.origin + location.pathname;
 
@@ -1193,13 +1193,41 @@ function linkConexao() {
 }
 
 function cartaoConectar() {
+  if (st.guia) return cartaoGuia();
   return `<div class="cartao">
     <h2>Conectar este aparelho</h2>
     <p class="muted">Peça ao responsável o <b>link de conexão</b> (na planilha: menu <i>Encontro com Deus → Conectar celulares</i>) e abra-o neste aparelho. Ou cole o link aqui:</p>
     <div class="form">
-      <input id="colarLink" placeholder="Cole o link de conexão" autocomplete="off">
+      <input id="colarLink" placeholder="Cole o link de conexão (começa com ${esc(SITE.replace(/^https?:\/\//, ''))}#conectar=…)" autocomplete="off">
       <button class="btn primario bloco" data-acao="usarLink">Conectar</button>
       <button class="btn bloco" data-acao="ativarDemo">Ver demonstração com dados fictícios</button>
+    </div>
+    <p class="muted peq" style="margin-top:12px">Primeira vez e só tem o link da planilha? Cole ele aqui mesmo que eu mostro o que falta.</p>
+  </div>`;
+}
+
+/* Quando colam o link da planilha (ou do script) em vez do link de conexão. */
+function cartaoGuia() {
+  const g = st.guia;
+  const script = g.tipo === 'script';
+  return `<div class="cartao">
+    <h2>${script ? 'Esse é o endereço do script' : 'Esse é o link da planilha'}</h2>
+    <p>${script
+      ? 'Quase lá! O script já está implantado. Agora falta só pegar o <b>link de conexão</b>, que leva junto a chave de acesso:'
+      : 'O app não lê a planilha direto pelo link: antes, é preciso instalar nela um pequeno script (uma vez só, uns 5 minutos, <b>no computador</b>). Depois ele gera o <b>link de conexão</b> para os celulares.'}</p>
+    <ol class="passos">
+      ${script ? '' : `
+      <li>Abra a planilha${g.url ? ` (<a href="${esc(g.url)}" target="_blank" rel="noopener">abrir</a>)` : ''} no <b>computador</b>. Se ela veio de um arquivo .xlsx, use <b>Arquivo → Salvar como Planilhas Google</b> e continue na cópia.</li>
+      <li>Menu <b>Extensões → Apps Script</b>. Apague o que estiver lá, cole o código (botão abaixo) e clique em salvar 💾.</li>
+      <li><b>Implantar → Nova implantação</b> → engrenagem → <b>App da Web</b>. Executar como: <i>Eu</i>. Quem pode acessar: <i>Qualquer pessoa</i>. Clique em <b>Implantar</b> e autorize (se aparecer "app não verificado": <i>Avançado → Acessar</i>). Copie o endereço que termina em <b>/exec</b>.</li>`}
+      <li>Volte à planilha e recarregue a página (F5). Vai aparecer o menu <b>Encontro com Deus</b> → <b>Conectar celulares</b>${script ? '' : ' (na primeira vez ele pede o endereço /exec: cole)'}.</li>
+      <li>Ele mostra o <b>link de conexão</b>: envie pelo WhatsApp e abra no celular, ou cole aqui.</li>
+    </ol>
+    <div class="form" style="margin-top:12px">
+      ${script ? '' : '<button class="btn primario bloco" data-acao="copiarScript">Copiar código do script</button>'}
+      <input id="colarLink" placeholder="Cole aqui o link de conexão" autocomplete="off">
+      <button class="btn ${script ? 'primario' : ''} bloco" data-acao="usarLink">Conectar</button>
+      <button class="btn bloco" data-acao="fecharGuia">Voltar</button>
     </div>
   </div>`;
 }
@@ -1293,8 +1321,16 @@ async function salvarAvancado(f) {
 }
 
 async function conectarComLink(texto) {
-  const m = String(texto || '').match(/#conectar=([A-Za-z0-9_-]+)/) || String(texto || '').match(/^([A-Za-z0-9_-]{20,})$/);
-  if (!m) { toast('Link de conexão inválido.', 'erro'); return; }
+  const txt = String(texto || '').trim();
+  const m = txt.match(/#conectar=([A-Za-z0-9_-]+)/) || txt.match(/^([A-Za-z0-9_-]{20,})$/);
+  if (!m) {
+    if (/docs\.google\.com\/spreadsheets|drive\.google\.com/i.test(txt)) st.guia = { tipo: 'planilha', url: txt.match(/https?:\/\/\S+/)?.[0] || '' };
+    else if (/script\.google(usercontent)?\.com/i.test(txt)) st.guia = { tipo: 'script' };
+    else { toast(txt ? 'Isso não parece um link de conexão. Ele vem do menu "Encontro com Deus → Conectar celulares" da planilha.' : 'Cole o link de conexão.', 'erro'); return; }
+    irPara('ajustes'); renderAjustes(); scrollTo(0, 0);
+    return;
+  }
+  st.guia = null;
   let d;
   try { d = b64url.dec(m[1]); } catch { toast('Link de conexão inválido.', 'erro'); return; }
   if (!d.u || !d.k) { toast('Link de conexão incompleto.', 'erro'); return; }
@@ -1491,6 +1527,7 @@ document.addEventListener('click', async (e) => {
       try { const r = await fetch('apps-script/Codigo.gs', { cache: 'no-cache' }); await navigator.clipboard.writeText(await r.text()); toast('Código copiado. Cole no Apps Script.', 'ok'); }
       catch { toast('Não consegui copiar. Use "Ver arquivo".', 'erro'); }
       break;
+    case 'fecharGuia': st.guia = null; renderAjustes(); break;
     case 'ativarDemo': cfg.demo = true; salvarCfg(); st.base = null; await recarregar(); irPara('painel'); toast('Modo demonstração: dados fictícios.'); break;
     case 'resetarDemo': localStorage.removeItem(K.demo); await recarregar(); toast('Dados fictícios recriados.', 'ok'); break;
     case 'desconectar': desconectar(); break;

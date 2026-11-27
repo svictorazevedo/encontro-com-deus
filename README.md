@@ -78,6 +78,7 @@ Pode ser editada direto na planilha. Sexo vazio = misto. O quarto de cada pessoa
 
 ## Versões
 
+- **2.1.1**: colar o link da planilha (ou do script) em "Conectar" mostra o passo a passo de instalação em vez de "link inválido".
 - **2.1.0**: alocação de quartos (tela Quartos, distribuição automática, quarto no check-in, na ficha, no cadastro
   e no painel). Apps Script ganhou `atualizarVarios` (gravação em lote), `garantirAba` e leitura de abas extras.
 
