@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const VERSAO = '3.0.0';
+const VERSAO = '3.1.0';
 const K = { cfg: 'encontro.cfg.v1', demo: 'encontro.demo.v1', fila: 'encontro.fila.v1', cache: 'encontro.cache.v1', local: 'encontro.local.v1' };
 const SITE = location.origin + location.pathname;
 
@@ -89,6 +89,7 @@ const SIS = {
   pagoRec: 'Pago na recepção', valorRec: 'Valor recepção', pagoRecEm: 'Pago na recepção em',
   cadastroPor: 'Cadastrado na recepção por',
   quarto: 'Quarto',
+  obs: 'Observação (recepção)',
 };
 
 /* Quartos: aba própria na planilha (criada automaticamente com o mapa abaixo) */
@@ -196,12 +197,12 @@ function montarPessoa(linha, i) {
     lider: g('lider'), discipulador: g('discipulador'), sexo: g('sexo'), nascimento: g('nascimento'),
     medicamento: g('medicamento'), alergia: g('alergia'), restricao: g('restricao'), emergencia: g('emergencia'),
     locomocao: g('locomocao'), primeiraVez: g('primeiraVez'), igreja: g('igreja'),
-    quarto: g('sis_quarto'),
+    quarto: g('sis_quarto'), obs: g('sis_obs'),
   };
   const nsx = norm(p.sexo);
   p.sx = nsx.startsWith('f') ? 'f' : nsx.startsWith('m') ? 'm' : '';
   p.saude = [p.medicamento, p.alergia, p.restricao].some((v) => !negativo(v));
-  p.busca = norm([nome, p.comprador, codigo, p.lider, p.discipulador, p.quarto, rotuloQuarto(p.quarto)].join(' ')) + ' ' + celNacional(p.celular) + ' ' + celNacional(g('celularComprador'));
+  p.busca = norm([nome, p.comprador, codigo, p.lider, p.discipulador, p.quarto, rotuloQuarto(p.quarto), p.obs].join(' ')) + ' ' + celNacional(p.celular) + ' ' + celNacional(g('celularComprador'));
   return p;
 }
 
@@ -503,12 +504,17 @@ async function abrirFicha(p) {
         ${p.celular ? `<a class="btn" href="tel:+55${celNacional(p.celular)}">Ligar</a>` : ''}
         ${wa ? `<a class="btn" href="${wa}" target="_blank" rel="noopener">WhatsApp</a>` : ''}
       </div>
+      <div class="obs-ficha">
+        <div class="obs-topo"><b>Observação</b><button class="btn peq" value="obs">${p.obs ? 'Editar' : '+ Adicionar'}</button></div>
+        ${p.obs ? `<div class="obs-txt">${esc(p.obs)}</div>` : '<div class="muted peq">Ex.: pagamentos parciais, recados.</div>'}
+      </div>
       <div class="dados">${linhas.map(([k, v, dest]) => `<div class="${dest ? 'destaque' : ''}"><b>${esc(k)}</b><span>${esc(v)}</span></div>`).join('')}</div>
       ${p.metodoRec ? `<button class="btn perigo peq" value="estornar">Desfazer pagamento da recepção</button>` : ''}`,
   });
   if (r === 'checkin') return fazerCheckin(p);
   if (r === 'pagar') return receberPagamento(p);
   if (r === 'quarto') return escolherQuarto(p);
+  if (r === 'obs') return editarObs(p);
   if (r === 'descheckin' && await confirmar('Desfazer check-in', `<p>Remover a presença de <b>${esc(p.nome)}</b>?</p>`, 'Desfazer check-in')) {
     atualizar(p, valoresCheckin(false)); toast('Check-in desfeito.');
   }
@@ -516,6 +522,28 @@ async function abrirFicha(p) {
     atualizar(p, valoresSemPagamento()); toast('Pagamento desfeito.');
   }
 }
+
+async function editarObs(p) {
+  const r = await folha({
+    titulo: 'Observação',
+    corpo: `${cabecalhoPessoa(p)}<div class="form">
+      <label class="campo">Observação<textarea name="obs" rows="5" placeholder="Ex.: 10/12 pagou R$ 50 no PIX · falta R$ 95">${esc(p.obs)}</textarea></label>
+      <button type="button" class="btn peq" id="obsHoje">+ Linha com a data de hoje</button>
+    </div>`,
+    botoes: [{ v: 'ok', t: 'Salvar', cls: 'primario' }],
+    ler: (f) => ({ obs: f.obs.value.trim() }),
+  });
+  if (r && r.dados.obs !== p.obs) { atualizar(p, { [SIS.obs]: r.dados.obs }); toast('Observação salva.', 'ok'); }
+  const atual = acharPessoaPorCodigo(p) || p;
+  return abrirFicha(atual);
+}
+document.addEventListener('click', (e) => {
+  if (e.target.id !== 'obsHoje') return;
+  const t = $('#folhaCorpo textarea[name=obs]');
+  const hoje = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  t.value = (t.value.trim() ? t.value.trim() + String.fromCharCode(10) : '') + hoje + ' ';
+  t.focus(); t.setSelectionRange(t.value.length, t.value.length);
+});
 
 /* --- cadastro --- */
 function nomesExistentes(k) {
@@ -556,6 +584,7 @@ async function novoCadastro(nomeInicial = '') {
       })()}</select></label>
       <div><div class="rotulo-grupo">Pagamento</div>${radios('pagamento', [['', 'Não pagou'], ...METODOS.map((m) => [m, m])], '')}</div>
       <label class="campo">Valor (R$)<input name="valor" inputmode="decimal" value="${esc(cfg.valorPadrao)}"></label>
+      <label class="campo">Observação <span class="muted" style="font-weight:400">(ex.: pagamento parcial)</span><textarea name="obs" rows="3" placeholder="Ex.: pagou R$ 50 no PIX, falta R$ 95"></textarea></label>
       <label class="interruptor">Já fazer check-in <input type="checkbox" name="checkin" checked></label>
     </div>
     <datalist id="dlDisc">${nomesExistentes('discipulador')}</datalist>
@@ -597,6 +626,7 @@ async function novoCadastro(nomeInicial = '') {
     [SIS.cadastroPor]: cfg.atendente || 'Recepção',
   };
   if (d.quarto) v[SIS.quarto] = d.quarto;
+  if (d.obs) v[SIS.obs] = d.obs;
   if (colNome('comprador')) v[colNome('comprador')] = nome;
   if (colNome('usado')) v[colNome('usado')] = 'Não Usado';
   if (d.pagamento) {
@@ -1144,6 +1174,7 @@ function selos(p, completo = false) {
   if (p.checkin) s.push(`<span class="selo ok">Presente${p.checkinEm ? ' ' + esc(p.checkinEm.split(' ')[1] || '') : ''}</span>`);
   if (p.quarto) s.push(`<span class="selo pri">🛏 ${esc(completo ? p.quarto : rotuloQuarto(p.quarto))}</span>`);
   if (p.saude) s.push('<span class="selo azul">⚕ Saúde</span>');
+  if (p.obs) s.push(`<span class="selo" title="${esc(p.obs)}">📝 ${esc(completo ? 'Obs.' : p.obs.length > 24 ? p.obs.slice(0, 22) + '…' : p.obs)}</span>`);
   return s.join('');
 }
 

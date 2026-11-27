@@ -114,6 +114,8 @@ Pode ser editada direto na planilha. Sexo vazio = misto. O quarto de cada pessoa
 
 ## Versões
 
+- **3.1.0**: campo **Observação** no cadastro e na ficha (editável, com botão de data de hoje), para pagamentos parciais e recados;
+  aparece como selo 📝 na lista e entra na busca. Coluna `Observação (recepção)`.
 - **3.0.0**: banco no Firebase (ao vivo entre celulares, offline): criar evento com a planilha, entrar com código,
   atualizar inscritos sem perder o que a recepção fez, baixar .xlsx.
 - **2.2.0**: abrir a planilha direto do arquivo (.xlsx/.csv), sem Google; baixar planilha atualizada (.xlsx); juntar arquivo novo ou de outro celular.
