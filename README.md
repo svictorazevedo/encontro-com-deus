@@ -114,6 +114,7 @@ Pode ser editada direto na planilha. Sexo vazio = misto. O quarto de cada pessoa
 
 ## Versões
 
+- **3.1.3**: importação casa pelo código do ingresso **ou** pelo nome (planilha sem código não duplica quem veio do site); reconhece coluna "Pagamento".
 - **3.1.2**: reconhece a exportação de ingressos com "Ingresso" (código), "Situação", "Contato (celular)" e "Qual igreja".
 - **3.1.1**: reconhece planilhas de outros sites (Participante, Lote, Forma de pagamento, Situação, batizado 1/0, Observação);
   importação casa as pessoas pelo nome reconhecido e as colunas equivalentes (não duplica mais); números do Excel sem ".0"/notação científica.

@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const VERSAO = '3.1.2';
+const VERSAO = '3.1.3';
 const K = { cfg: 'encontro.cfg.v1', demo: 'encontro.demo.v1', fila: 'encontro.fila.v1', cache: 'encontro.cache.v1', local: 'encontro.local.v1' };
 const SITE = location.origin + location.pathname;
 
@@ -65,7 +65,7 @@ const CAMPOS = [
   { k: 'comprador', nome: 'Comprador', re: /^comprador$/ },
   { k: 'tipo', nome: 'Tipo', re: /^(tipo|lote|categoria|tipo de ingresso)$/ },
   { k: 'status', nome: 'Status', re: /^(status|situacao|status do pagamento|situacao do pagamento)$/ },
-  { k: 'metodo', nome: 'Método de pagamento', re: /metodo de pagamento|forma de pagamento/ },
+  { k: 'metodo', nome: 'Método de pagamento', re: /metodo de pagamento|forma de pagamento|^pagamento$/ },
   { k: 'preco', nome: 'Preço do Ingresso', re: /preco|valor do ingresso/ },
   { k: 'dataCompra', nome: 'Data da Compra', re: /data da compra/ },
   { k: 'celular', nome: 'Celular', re: /^(celular|telefone|whatsapp|contato celular|celular do participante|telefone do participante)$/ },
@@ -2209,27 +2209,28 @@ const Nuvem = {
     const kCod = mE.codigo >= 0 ? mE.codigo : cab.findIndex((h) => norm(h) === 'codigo');
     const kNome = mE.nome >= 0 ? mE.nome : mE.comprador;
     const kUsado = mE.usado, kStatus = mE.status;
-    const chave = (get) => {
+    // Chaves de uma linha: código do ingresso e nome. Casa pelo código; se não houver, pelo nome.
+    const chaves = (get) => {
       const c = kCod >= 0 ? String(get(kCod) ?? '').trim() : '';
-      if (c) return 'c:' + c;
       const n = kNome >= 0 ? norm(get(kNome)) : '';
-      return n ? 'n:' + n : '';
+      return [c && 'c:' + c, n && 'n:' + n].filter(Boolean);
     };
     const existentes = new Map();
+    const mapaExist = { get: (ks) => { for (const k of ks) if (existentes.has(k)) return existentes.get(k); return null; } };
     let maxO = 0;
     for (const [id, d] of E.pessoas) {
       const v = d.v || {};
-      const k = chave((i) => v['c' + i]);
-      if (k) existentes.set(k, [id, v]);
+      for (const k of chaves((i) => v['c' + i])) if (!existentes.has(k)) existentes.set(k, [id, v]);
       maxO = Math.max(maxO, Number(d.o) || 0);
     }
+    const chave = chaves;
     const sis = new Set(Object.values(SIS).map((c) => cab.indexOf(c)));
     const ops = [];
     let novos = 0, atualizados = 0;
     const usados = new Set(E.pessoas.keys());
     t.linhas.forEach((l) => {
       const k = chave((i) => { const j = fi.indexOf(i); return j >= 0 ? l[j] : ''; });
-      const ex = k && existentes.get(k);
+      const ex = k.length && mapaExist.get(k);
       if (ex) {
         const [id, v] = ex;
         const vv = {};
@@ -2252,7 +2253,7 @@ const Nuvem = {
         const v = {};
         l.forEach((x, j) => { if (String(x ?? '') !== '' && !sis.has(fi[j])) v['c' + fi[j]] = String(x); });
         ops.push([fs.doc(fs.collection(ref, 'pessoas'), id), { o: maxO + 1 + novos, v }]);
-        if (k) existentes.set(k, [id, v]);
+        k.forEach((x) => { if (!existentes.has(x)) existentes.set(x, [id, v]); });
         novos++;
       }
     });
