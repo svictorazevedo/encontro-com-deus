@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const VERSAO = '3.1.0';
+const VERSAO = '3.1.1';
 const K = { cfg: 'encontro.cfg.v1', demo: 'encontro.demo.v1', fila: 'encontro.fila.v1', cache: 'encontro.cache.v1', local: 'encontro.local.v1' };
 const SITE = location.origin + location.pathname;
 
@@ -61,14 +61,14 @@ const semNuvem = () => cfg.demo || cfg.local; // dados só no aparelho
 const CAMPOS = [
   { k: 'codigo', nome: 'Código', re: /^codigo$/ },
   { k: 'usado', nome: 'Usado', re: /^usado$/ },
-  { k: 'nome', nome: 'Nome Completo', re: /nome completo|^nome$/ },
+  { k: 'nome', nome: 'Nome Completo', re: /^(nome completo|nome|participante|nome do participante|nome completo do participante|inscrito|nome do inscrito|encontrista)$/ },
   { k: 'comprador', nome: 'Comprador', re: /^comprador$/ },
-  { k: 'tipo', nome: 'Tipo', re: /^tipo$/ },
+  { k: 'tipo', nome: 'Tipo', re: /^(tipo|lote|categoria|tipo de ingresso|ingresso)$/ },
   { k: 'status', nome: 'Status', re: /^status$/ },
   { k: 'metodo', nome: 'Método de pagamento', re: /metodo de pagamento|forma de pagamento/ },
   { k: 'preco', nome: 'Preço do Ingresso', re: /preco|valor do ingresso/ },
   { k: 'dataCompra', nome: 'Data da Compra', re: /data da compra/ },
-  { k: 'celular', nome: 'Celular', re: /^celular$|^telefone$/ },
+  { k: 'celular', nome: 'Celular', re: /^(celular|telefone|whatsapp|celular do participante|telefone do participante)$/ },
   { k: 'celularComprador', nome: 'Celular do comprador', re: /celular do comprador/ },
   { k: 'emailComprador', nome: 'E-mail do comprador', re: /e ?mail/ },
   { k: 'igreja', nome: 'Igreja do comprador', re: /igreja do comprador/ },
@@ -76,13 +76,14 @@ const CAMPOS = [
   { k: 'sexo', nome: 'Sexo', re: /^sexo$/ },
   { k: 'discipulador', nome: 'Qual o nome do seu discipulador?', re: /discipulador/ },
   { k: 'lider', nome: 'Qual é o nome do(a) líder de sua célula?', re: /lider/ },
-  { k: 'locomocao', nome: 'Meio de locomoção', re: /locomocao/ },
+  { k: 'locomocao', nome: 'Meio de locomoção', re: /locomocao|transporte/ },
   { k: 'batizado', nome: 'Já foi batizado numa igreja evangélica?', re: /batizad/ },
   { k: 'primeiraVez', nome: 'Primeira vez no Encontro?', re: /primeira vez/ },
   { k: 'medicamento', nome: 'Medicamento contínuo', re: /medicamento/ },
   { k: 'alergia', nome: 'Alergia', re: /alergia/ },
   { k: 'restricao', nome: 'Restrição alimentar', re: /restricao/ },
   { k: 'emergencia', nome: 'Contato de emergência', re: /emergencia/ },
+  { k: 'obsArq', nome: 'Observação (da planilha)', re: /^(observacao|observacoes|obs)$/ },
 ];
 const SIS = {
   checkin: 'Check-in', checkinEm: 'Check-in em', checkinPor: 'Check-in por',
@@ -184,25 +185,27 @@ function montarPessoa(linha, i) {
   const metodo = g('metodo');
   const metodoRec = g('sis_pagoRec');
   const pagoStatus = /^(pago|aprovado|confirmado|concluido)/.test(ns);
-  const pago = !cancelado && (pagoStatus || !!metodoRec);
+  // Planilhas sem "Status": o pagamento vem da forma de pagamento ("Não pago", "Pendente" = não pagou).
+  const pagoMetodo = !ns && !!norm(metodo) && !/^(nao pago|pendente|aguardando|em aberto|aberto|nao)( |$)/.test(norm(metodo));
+  const pago = !cancelado && (pagoStatus || pagoMetodo || !!metodoRec);
   const pagoRec = pago && (!!metodoRec || metodoEhRecepcao(metodo));
   const nb = norm(g('batizado'));
   const p = {
     linha: i + 2, codigo, nome, cat, tipo, status, metodo, cancelado, pago, pagoRec, pagoApp: pago && !pagoRec,
-    batizado: /^sim/.test(nb) ? 'sim' : /^nao/.test(nb) ? 'nao' : '',
-    checkin: /^sim/.test(norm(g('sis_checkin'))) || norm(g('usado')) === 'usado',
+    batizado: /^(sim|1|1 0|true|verdadeiro)( |$)/.test(nb) ? 'sim' : /^(nao|0|0 0|false|falso)( |$)/.test(nb) ? 'nao' : '',
+    checkin: /^(sim|realizado|confirmado|feito|presente|ok)( |$)/.test(norm(g('sis_checkin'))) || norm(g('usado')) === 'usado',
     checkinEm: g('sis_checkinEm'), checkinPor: g('sis_checkinPor'),
     metodoRec, valorRec: g('sis_valorRec'), pagoRecEm: g('sis_pagoRecEm'), cadastroPor: g('sis_cadastroPor'),
     preco: g('preco'), celular: g('celular') || g('celularComprador'), comprador: titulo(g('comprador')),
     lider: g('lider'), discipulador: g('discipulador'), sexo: g('sexo'), nascimento: g('nascimento'),
     medicamento: g('medicamento'), alergia: g('alergia'), restricao: g('restricao'), emergencia: g('emergencia'),
     locomocao: g('locomocao'), primeiraVez: g('primeiraVez'), igreja: g('igreja'),
-    quarto: g('sis_quarto'), obs: g('sis_obs'),
+    quarto: g('sis_quarto'), obs: g('sis_obs'), obsArq: g('obsArq'),
   };
   const nsx = norm(p.sexo);
   p.sx = nsx.startsWith('f') ? 'f' : nsx.startsWith('m') ? 'm' : '';
   p.saude = [p.medicamento, p.alergia, p.restricao].some((v) => !negativo(v));
-  p.busca = norm([nome, p.comprador, codigo, p.lider, p.discipulador, p.quarto, rotuloQuarto(p.quarto), p.obs].join(' ')) + ' ' + celNacional(p.celular) + ' ' + celNacional(g('celularComprador'));
+  p.busca = norm([nome, p.comprador, codigo, p.lider, p.discipulador, p.quarto, rotuloQuarto(p.quarto), p.obs, p.obsArq].join(' ')) + ' ' + celNacional(p.celular) + ' ' + celNacional(g('celularComprador'));
   return p;
 }
 
@@ -506,7 +509,8 @@ async function abrirFicha(p) {
       </div>
       <div class="obs-ficha">
         <div class="obs-topo"><b>Observação</b><button class="btn peq" value="obs">${p.obs ? 'Editar' : '+ Adicionar'}</button></div>
-        ${p.obs ? `<div class="obs-txt">${esc(p.obs)}</div>` : '<div class="muted peq">Ex.: pagamentos parciais, recados.</div>'}
+        ${p.obsArq ? `<div class="obs-txt"><span class="muted peq">Da inscrição:</span> ${esc(p.obsArq)}</div>` : ''}
+        ${p.obs ? `<div class="obs-txt">${esc(p.obs)}</div>` : p.obsArq ? '' : '<div class="muted peq">Ex.: pagamentos parciais, recados.</div>'}
       </div>
       <div class="dados">${linhas.map(([k, v, dest]) => `<div class="${dest ? 'destaque' : ''}"><b>${esc(k)}</b><span>${esc(v)}</span></div>`).join('')}</div>
       ${p.metodoRec ? `<button class="btn perigo peq" value="estornar">Desfazer pagamento da recepção</button>` : ''}`,
@@ -1174,7 +1178,8 @@ function selos(p, completo = false) {
   if (p.checkin) s.push(`<span class="selo ok">Presente${p.checkinEm ? ' ' + esc(p.checkinEm.split(' ')[1] || '') : ''}</span>`);
   if (p.quarto) s.push(`<span class="selo pri">🛏 ${esc(completo ? p.quarto : rotuloQuarto(p.quarto))}</span>`);
   if (p.saude) s.push('<span class="selo azul">⚕ Saúde</span>');
-  if (p.obs) s.push(`<span class="selo" title="${esc(p.obs)}">📝 ${esc(completo ? 'Obs.' : p.obs.length > 24 ? p.obs.slice(0, 22) + '…' : p.obs)}</span>`);
+  const ob = p.obs || p.obsArq;
+  if (ob) s.push(`<span class="selo" title="${esc(ob)}">📝 ${esc(completo ? 'Obs.' : ob.length > 24 ? ob.slice(0, 22) + '…' : ob)}</span>`);
   return s.join('');
 }
 
@@ -1680,7 +1685,13 @@ const Arq = {
     const buf = new Uint8Array(await file.arrayBuffer());
     const zip = buf[0] === 0x50 && buf[1] === 0x4b;
     const t = zip ? await Arq.xlsx(buf) : Arq.csv(Arq.texto(buf));
-    const linhas = t.linhas.map((l) => (l || []).map((v) => String(v ?? '').trim()));
+    const limpar = (v) => {
+      let x = String(v ?? '').trim();
+      if (/^-?\d+\.0+$/.test(x)) x = x.replace(/\.0+$/, '');
+      else if (/^-?\d+(\.\d+)?e\+?\d+$/i.test(x) && Number.isSafeInteger(Number(x))) x = String(Number(x));
+      return x;
+    };
+    const linhas = t.linhas.map((l) => (l || []).map(limpar));
     const hi = linhas.findIndex((l) => l.filter(Boolean).length >= 2);
     if (hi < 0) throw new Error('Não achei dados nesse arquivo.');
     const cab = linhas[hi].map((h, i) => h || `Coluna ${i + 1}`);
@@ -1775,6 +1786,7 @@ const Arq = {
           else if (t === 'inlineStr') val = tags(c, 't').map((x) => x.textContent).join('');
           else if (t === 'b') val = v === '1' ? 'VERDADEIRO' : 'FALSO';
           else if (v !== '' && !t && ehData(+(c.getAttribute('s') || 0))) val = data(+v);
+          else if (v !== '' && !t && isFinite(+v)) val = Number.isSafeInteger(+v) ? String(+v) : String(+(+v).toPrecision(15));
           else val = v;
           l[k++] = val;
         }
@@ -2183,11 +2195,26 @@ const Nuvem = {
     const ref = Nuvem.evRef();
     const cab0 = (E.ev && E.ev.cabPessoas) || [];
     const cab = [...cab0];
-    t.cab.forEach((c) => { if (!cab.includes(c)) cab.push(c); });
+    // Coluna do arquivo → coluna do evento: mesmo nome, ou o mesmo campo reconhecido (ex.: "Nome" ↔ "Participante").
+    const mE = mapear(cab0), mA = mapear(t.cab);
+    const destino = t.cab.map((h, j) => {
+      if (cab.includes(h)) return h;
+      const k = CAMPOS.find((c) => mA[c.k] === j && mE[c.k] >= 0);
+      if (k) return cab0[mE[k.k]];
+      cab.push(h);
+      return h;
+    });
     if (cab.length !== cab0.length) await comTempo(fs.updateDoc(ref, { cabPessoas: cab }), 30000, 'Sem conexão com o banco.');
-    const ic = (re) => cab.map(norm).findIndex((h) => re.test(h));
-    const kCod = ic(/^codigo$/), kNome = ic(/nome completo|^nome$/), kUsado = ic(/^usado$/), kStatus = ic(/^status$/);
-    const chave = (get) => { const c = kCod >= 0 ? String(get(kCod) ?? '').trim() : ''; if (c) return 'c:' + c; const n = kNome >= 0 ? norm(get(kNome)) : ''; return n ? 'n:' + n : ''; };
+    const fi = destino.map((h) => cab.indexOf(h));
+    const kCod = mE.codigo >= 0 ? mE.codigo : cab.findIndex((h) => norm(h) === 'codigo');
+    const kNome = mE.nome >= 0 ? mE.nome : mE.comprador;
+    const kUsado = mE.usado, kStatus = mE.status;
+    const chave = (get) => {
+      const c = kCod >= 0 ? String(get(kCod) ?? '').trim() : '';
+      if (c) return 'c:' + c;
+      const n = kNome >= 0 ? norm(get(kNome)) : '';
+      return n ? 'n:' + n : '';
+    };
     const existentes = new Map();
     let maxO = 0;
     for (const [id, d] of E.pessoas) {
@@ -2197,7 +2224,6 @@ const Nuvem = {
       maxO = Math.max(maxO, Number(d.o) || 0);
     }
     const sis = new Set(Object.values(SIS).map((c) => cab.indexOf(c)));
-    const fi = t.cab.map((c) => cab.indexOf(c));
     const ops = [];
     let novos = 0, atualizados = 0;
     const usados = new Set(E.pessoas.keys());
@@ -2211,19 +2237,20 @@ const Nuvem = {
           const i = fi[j];
           if (sis.has(i)) return; // colunas da recepção: nunca sobrescreve
           const atual = String(v['c' + i] ?? '');
-          let novo = String(x ?? '');
+          const novo = String(x ?? '');
+          if (!novo && atual) return; // arquivo sem o dado: mantém o que já tinha
           if (i === kUsado && norm(atual) === 'usado') return;
           if (i === kStatus && /^(pago|aprovado)/.test(norm(atual)) && !/^(pago|aprovado)/.test(norm(novo))) return;
           if (novo !== atual) vv['c' + i] = novo;
         });
         if (Object.keys(vv).length) { ops.push([fs.doc(fs.collection(ref, 'pessoas'), id), { v: vv }, true]); atualizados++; }
       } else {
-        const cod = kCod >= 0 ? l[fi.indexOf(kCod)] : '';
+        const cod = kCod >= 0 && fi.indexOf(kCod) >= 0 ? l[fi.indexOf(kCod)] : '';
         let id = cod ? idDoc(cod) : 'linha-' + Date.now().toString(36) + '-' + novos;
         while (usados.has(id)) id += '~';
         usados.add(id);
         const v = {};
-        l.forEach((x, j) => { if (String(x ?? '') !== '') v['c' + fi[j]] = String(x); });
+        l.forEach((x, j) => { if (String(x ?? '') !== '' && !sis.has(fi[j])) v['c' + fi[j]] = String(x); });
         ops.push([fs.doc(fs.collection(ref, 'pessoas'), id), { o: maxO + 1 + novos, v }]);
         if (k) existentes.set(k, [id, v]);
         novos++;
