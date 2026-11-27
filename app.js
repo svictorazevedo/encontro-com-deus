@@ -5,8 +5,8 @@
  */
 'use strict';
 
-const VERSAO = '2.1.1';
-const K = { cfg: 'encontro.cfg.v1', demo: 'encontro.demo.v1', fila: 'encontro.fila.v1', cache: 'encontro.cache.v1' };
+const VERSAO = '2.2.0';
+const K = { cfg: 'encontro.cfg.v1', demo: 'encontro.demo.v1', fila: 'encontro.fila.v1', cache: 'encontro.cache.v1', local: 'encontro.local.v1' };
 const SITE = location.origin + location.pathname;
 
 /* ================= utilitários ================= */
@@ -51,11 +51,12 @@ const vibrar = (p) => { try { navigator.vibrate && navigator.vibrate(p); } catch
 /* ================= configuração ================= */
 const PADRAO = {
   url: '', planilha: '', aba: '', chave: '', atendente: '', evento: '',
-  valorPadrao: '145', metodosRecepcao: 'Externo, Manual, Dinheiro', mapa: {}, demo: false, nomePlanilha: '',
+  valorPadrao: '145', metodosRecepcao: 'Externo, Manual, Dinheiro', mapa: {}, demo: false, local: false, nomePlanilha: '',
 };
 let cfg = { ...PADRAO, ...ler(K.cfg, {}) };
 const salvarCfg = () => gravarLS(K.cfg, cfg);
-const configurado = () => cfg.demo || !!(cfg.url && cfg.chave);
+const configurado = () => cfg.demo || cfg.local || !!(cfg.url && cfg.chave);
+const semNuvem = () => cfg.demo || cfg.local; // dados só no aparelho
 
 const CAMPOS = [
   { k: 'codigo', nome: 'Código', re: /^codigo$/ },
@@ -121,7 +122,7 @@ const st = {
 class ErroRede extends Error {}
 
 async function api(acao, dados = {}) {
-  if (cfg.demo) return Demo.api(acao, dados);
+  if (semNuvem()) return Demo.api(acao, dados);
   if (!cfg.url) throw new Error('Aparelho não conectado. Vá em Ajustes.');
   const corpo = JSON.stringify({ acao, chave: cfg.chave, planilha: cfg.planilha, aba: cfg.aba, ...dados });
   let r;
@@ -242,7 +243,7 @@ function aplicarLocal(op) {
 }
 
 function salvarCache() {
-  if (cfg.demo || !st.base) return;
+  if (semNuvem() || !st.base) return;
   gravarLS(K.cache, { ...st.base, em: st.carregadoEm && st.carregadoEm.toISOString(), url: cfg.url });
 }
 
@@ -1194,15 +1195,38 @@ function linkConexao() {
 
 function cartaoConectar() {
   if (st.guia) return cartaoGuia();
+  const anterior = !cfg.local && ler(K.local, null);
   return `<div class="cartao">
-    <h2>Conectar este aparelho</h2>
-    <p class="muted">Peça ao responsável o <b>link de conexão</b> (na planilha: menu <i>Encontro com Deus → Conectar celulares</i>) e abra-o neste aparelho. Ou cole o link aqui:</p>
+    <h2>Começar</h2>
+    <p class="muted">Abra a planilha de inscritos (o arquivo <b>.xlsx</b> ou <b>.csv</b> exportado do site de ingressos). Pronto, já dá para usar.</p>
     <div class="form">
-      <input id="colarLink" placeholder="Cole o link de conexão (começa com ${esc(SITE.replace(/^https?:\/\//, ''))}#conectar=…)" autocomplete="off">
-      <button class="btn primario bloco" data-acao="usarLink">Conectar</button>
+      <button class="btn primario bloco grande" data-acao="abrirArquivo">📂 Abrir planilha (.xlsx ou .csv)</button>
+      ${anterior ? `<button class="btn bloco" data-acao="voltarLocal">Voltar para “${esc(anterior.planilha || 'arquivo aberto')}”</button>` : ''}
       <button class="btn bloco" data-acao="ativarDemo">Ver demonstração com dados fictícios</button>
     </div>
-    <p class="muted peq" style="margin-top:12px">Primeira vez e só tem o link da planilha? Cole ele aqui mesmo que eu mostro o que falta.</p>
+    <details class="avancado" style="margin-top:14px"><summary>Tenho um link de conexão (vários celulares na mesma planilha Google)</summary>
+      <div class="form" style="margin-top:10px">
+        <input id="colarLink" placeholder="Cole o link de conexão" autocomplete="off">
+        <button class="btn bloco" data-acao="usarLink">Conectar</button>
+      </div>
+    </details>
+  </div>`;
+}
+
+function cartaoLocal() {
+  const d = ler(K.local, null) || {};
+  return `<div class="cartao">
+    <div class="estado">
+      <div class="bola"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+      <div style="min-width:0"><b>${esc(d.planilha || 'Planilha')}</b>
+        <div class="muted peq">${st.pessoas.length} registros · salvo neste aparelho${d.abertoEm ? ' · aberto em ' + esc(d.abertoEm) : ''}</div></div>
+    </div>
+    <div class="form" style="margin-top:12px">
+      <button class="btn primario bloco" data-acao="baixarPlanilha">⬇ Baixar planilha atualizada (.xlsx)</button>
+      <button class="btn bloco" data-acao="abrirArquivo">📂 Abrir arquivo novo / juntar outro celular</button>
+    </div>
+    <p class="muted peq" style="margin-top:10px">Tudo o que for feito aqui (check-in, pagamento, quarto, cadastro) fica guardado <b>neste aparelho</b>, mesmo sem internet.
+      Usando mais de um celular? No fim, baixe a planilha de cada um e abra aqui escolhendo <b>Juntar</b>.</p>
   </div>`;
 }
 
@@ -1212,33 +1236,27 @@ function cartaoGuia() {
   const script = g.tipo === 'script';
   return `<div class="cartao">
     <h2>${script ? 'Esse é o endereço do script' : 'Esse é o link da planilha'}</h2>
-    <p>${script
-      ? 'Quase lá! O script já está implantado. Agora falta só pegar o <b>link de conexão</b>, que leva junto a chave de acesso:'
-      : 'O app não lê a planilha direto pelo link: antes, é preciso instalar nela um pequeno script (uma vez só, uns 5 minutos, <b>no computador</b>). Depois ele gera o <b>link de conexão</b> para os celulares.'}</p>
+    ${script ? `<p>Pegue o <b>link de conexão</b> na planilha: menu <b>Encontro com Deus → Conectar celulares</b>, e cole aqui.</p>
+      <div class="form"><input id="colarLink" placeholder="Cole aqui o link de conexão" autocomplete="off">
+      <button class="btn primario bloco" data-acao="usarLink">Conectar</button></div>` : `
+    <p>O jeito mais simples: baixe a planilha como arquivo e abra aqui.</p>
     <ol class="passos">
-      ${script ? '' : `
-      <li>Abra a planilha${g.url ? ` (<a href="${esc(g.url)}" target="_blank" rel="noopener">abrir</a>)` : ''} no <b>computador</b>. Se ela veio de um arquivo .xlsx, use <b>Arquivo → Salvar como Planilhas Google</b> e continue na cópia.</li>
-      <li>Menu <b>Extensões → Apps Script</b>. Apague o que estiver lá, cole o código (botão abaixo) e clique em salvar 💾.</li>
-      <li><b>Implantar → Nova implantação</b> → engrenagem → <b>App da Web</b>. Executar como: <i>Eu</i>. Quem pode acessar: <i>Qualquer pessoa</i>. Clique em <b>Implantar</b> e autorize (se aparecer "app não verificado": <i>Avançado → Acessar</i>). Copie o endereço que termina em <b>/exec</b>.</li>`}
-      <li>Volte à planilha e recarregue a página (F5). Vai aparecer o menu <b>Encontro com Deus</b> → <b>Conectar celulares</b>${script ? '' : ' (na primeira vez ele pede o endereço /exec: cole)'}.</li>
-      <li>Ele mostra o <b>link de conexão</b>: envie pelo WhatsApp e abra no celular, ou cole aqui.</li>
+      <li>Abra a planilha${g.url ? ` (<a href="${esc(g.url)}" target="_blank" rel="noopener">abrir</a>)` : ''}.</li>
+      <li>No computador: <b>Arquivo → Fazer download → Microsoft Excel (.xlsx)</b>.<br>No app do celular: <b>⋮ → Compartilhar e exportar → Salvar como → Excel</b>.</li>
+      <li>Volte aqui e toque em <b>Abrir planilha</b>.</li>
     </ol>
-    <div class="form" style="margin-top:12px">
-      ${script ? '' : '<button class="btn primario bloco" data-acao="copiarScript">Copiar código do script</button>'}
-      <input id="colarLink" placeholder="Cole aqui o link de conexão" autocomplete="off">
-      <button class="btn ${script ? 'primario' : ''} bloco" data-acao="usarLink">Conectar</button>
-      <button class="btn bloco" data-acao="fecharGuia">Voltar</button>
-    </div>
+    <div class="form" style="margin-top:12px"><button class="btn primario bloco grande" data-acao="abrirArquivo">📂 Abrir planilha (.xlsx ou .csv)</button></div>`}
+    <div class="form" style="margin-top:8px"><button class="btn bloco" data-acao="fecharGuia">Voltar</button></div>
   </div>`;
 }
 
 function renderAjustes() {
   const el = $('#tela-ajustes');
-  const conectado = configurado() && !cfg.demo;
+  const conectado = configurado() && !cfg.demo && !cfg.local;
   const instalado = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
   el.innerHTML = `
-    ${cfg.demo ? `<div class="aviso">Você está no <b>modo demonstração</b>. Para usar de verdade, conecte o aparelho à planilha abaixo.</div>` : ''}
+    ${cfg.demo ? `<div class="aviso">Você está no <b>modo demonstração</b>. Para usar de verdade, abra a planilha de inscritos abaixo.</div>` : ''}
     ${conectado ? `
       <div class="cartao">
         <div class="estado">
@@ -1246,7 +1264,7 @@ function renderAjustes() {
           <div style="min-width:0"><b>${esc(cfg.nomePlanilha || st.planilha || 'Planilha conectada')}</b>
             <div class="muted peq">${st.erro ? esc(st.erro) : st.base ? `${st.pessoas.length} registros · ${st.aba ? 'aba ' + esc(st.aba) + ' · ' : ''}${st.carregadoEm ? 'atualizado às ' + hora(st.carregadoEm) : 'dados guardados no aparelho'}` : 'Carregando…'}</div></div>
         </div>
-      </div>` : cartaoConectar()}
+      </div>` : cfg.local ? cartaoLocal() : cartaoConectar()}
 
     ${configurado() ? `
     <div class="cartao form">
@@ -1304,7 +1322,7 @@ function renderAjustes() {
 
     <div class="cartao linha-botoes">
       ${cfg.demo ? '<button class="btn" data-acao="resetarDemo">Recriar dados fictícios</button>' : '<button class="btn" data-acao="ativarDemo">Modo demonstração</button>'}
-      ${configurado() ? '<button class="btn perigo" data-acao="desconectar">Desconectar este aparelho</button>' : ''}
+      ${configurado() ? `<button class="btn perigo" data-acao="desconectar">${cfg.local ? 'Fechar planilha e apagar do aparelho' : 'Desconectar este aparelho'}</button>` : ''}
       <span class="muted peq" style="margin-left:auto">v${VERSAO}</span>
     </div>`;
 }
@@ -1354,9 +1372,9 @@ async function conectarComLink(texto) {
 async function desconectar() {
   const pend = st.fila.length;
   if (!await confirmar('Desconectar aparelho',
-    `<p>Remove a conexão e os dados guardados neste aparelho. A planilha não é alterada.</p>${pend ? `<div class="aviso erro"><b>${pend} ação(ões) ainda não foram enviadas</b> e serão perdidas.</div>` : ''}`,
+    `<p>${cfg.local ? 'Apaga deste aparelho os dados do arquivo <b>e tudo o que foi feito nele</b> (check-ins, pagamentos, quartos). Baixe a planilha atualizada antes.' : 'Remove a conexão e os dados guardados neste aparelho. A planilha não é alterada.'}</p>${pend ? `<div class="aviso erro"><b>${pend} ação(ões) ainda não foram enviadas</b> e serão perdidas.</div>` : ''}`,
     'Desconectar')) return;
-  [K.cfg, K.cache, K.fila].forEach((k) => localStorage.removeItem(k));
+  [K.cfg, K.cache, K.fila, K.local].forEach((k) => localStorage.removeItem(k));
   cfg = { ...PADRAO };
   Object.assign(st, { cab: [], linhas: [], abas: [], pessoas: [], base: null, fila: [], planilha: '', aba: '', erro: null, carregadoEm: null });
   renderizar();
@@ -1441,9 +1459,10 @@ function girar(on) { $$('[data-acao="recarregar"]').forEach((b) => b.classList.t
 function atualizarStatus() {
   const s = $('#statusSync');
   s.className = 'sync';
-  $('#faixaOffline').hidden = !(st.offline && configurado() && !cfg.demo);
+  $('#faixaOffline').hidden = !(st.offline && configurado() && !semNuvem());
   if (!configurado()) { s.textContent = 'não conectado'; return; }
   if (cfg.demo) { s.textContent = 'demonstração'; s.classList.add('ok'); return; }
+  if (cfg.local) { s.textContent = 'salvo neste aparelho'; s.classList.add('ok'); return; }
   if (st.offline) { s.classList.add('offline'); s.textContent = st.fila.length ? `sem internet · ${st.fila.length} a enviar` : 'sem internet'; return; }
   if (st.fila.length) { s.classList.add('pendente'); s.textContent = `enviando ${st.fila.length}…`; return; }
   if (st.erro) { s.classList.add('offline'); s.textContent = 'erro na planilha'; return; }
@@ -1527,8 +1546,11 @@ document.addEventListener('click', async (e) => {
       try { const r = await fetch('apps-script/Codigo.gs', { cache: 'no-cache' }); await navigator.clipboard.writeText(await r.text()); toast('Código copiado. Cole no Apps Script.', 'ok'); }
       catch { toast('Não consegui copiar. Use "Ver arquivo".', 'erro'); }
       break;
+    case 'voltarLocal': Object.assign(cfg, { local: true, demo: false, mapa: {} }); salvarCfg(); st.base = null; await recarregar(); irPara('recepcao'); break;
+    case 'abrirArquivo': $('#arquivo').click(); break;
+    case 'baixarPlanilha': baixarPlanilha(); break;
     case 'fecharGuia': st.guia = null; renderAjustes(); break;
-    case 'ativarDemo': cfg.demo = true; salvarCfg(); st.base = null; await recarregar(); irPara('painel'); toast('Modo demonstração: dados fictícios.'); break;
+    case 'ativarDemo': cfg.demo = true; cfg.local = false; salvarCfg(); st.base = null; await recarregar(); irPara('painel'); toast('Modo demonstração: dados fictícios.'); break;
     case 'resetarDemo': localStorage.removeItem(K.demo); await recarregar(); toast('Dados fictícios recriados.', 'ok'); break;
     case 'desconectar': desconectar(); break;
     case 'distribuir': distribuir(); break;
@@ -1560,6 +1582,7 @@ busca.addEventListener('keydown', (e) => {
 });
 $('#limparBusca').addEventListener('click', () => { busca.value = ''; st.busca = ''; $('#limparBusca').hidden = true; renderRecepcao(); busca.focus(); });
 
+$('#arquivo').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; importarArquivo(f); });
 window.addEventListener('online', () => { st.offline = false; enviarFila(); recarregar({ silencioso: true }); });
 window.addEventListener('offline', () => { st.offline = true; atualizarStatus(); });
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); st.instalar = e; if (telaAtual() === 'ajustes') renderAjustes(); });
@@ -1574,9 +1597,279 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden && configurado() && (!st.carregadoEm || Date.now() - st.carregadoEm > 15000)) recarregar({ silencioso: true });
 });
 
+/* ================= arquivo local (.xlsx / .csv) ================= */
+// Sem bibliotecas: lê o .zip do xlsx com DecompressionStream e o XML com DOMParser.
+const Arq = {
+  async ler(file) {
+    const buf = new Uint8Array(await file.arrayBuffer());
+    const zip = buf[0] === 0x50 && buf[1] === 0x4b;
+    const t = zip ? await Arq.xlsx(buf) : Arq.csv(Arq.texto(buf));
+    const linhas = t.linhas.map((l) => (l || []).map((v) => String(v ?? '').trim()));
+    const hi = linhas.findIndex((l) => l.filter(Boolean).length >= 2);
+    if (hi < 0) throw new Error('Não achei dados nesse arquivo.');
+    const cab = linhas[hi].map((h, i) => h || `Coluna ${i + 1}`);
+    const corpo = linhas.slice(hi + 1).filter((l) => l.some(Boolean)).map((l) => cab.map((_, i) => l[i] ?? ''));
+    return { cab, linhas: corpo, aba: t.aba || 'Inscritos', quartos: t.quartos || null };
+  },
+  texto(buf) {
+    try { return new TextDecoder('utf-8', { fatal: true }).decode(buf).replace(/^﻿/, ''); }
+    catch { return new TextDecoder('windows-1252').decode(buf); }
+  },
+  csv(txt) {
+    const prim = txt.split(/\r?\n/, 1)[0];
+    const sep = [';', ',', '\t'].map((c) => [c, prim.split(c).length]).sort((a, b) => b[1] - a[1])[0][0];
+    const out = []; let l = [], v = '', q = false;
+    for (let i = 0; i < txt.length; i++) {
+      const c = txt[i];
+      if (q) { if (c === '"') { if (txt[i + 1] === '"') { v += '"'; i++; } else q = false; } else v += c; }
+      else if (c === '"') q = true;
+      else if (c === sep) { l.push(v); v = ''; }
+      else if (c === '\n' || c === '\r') { if (c === '\r' && txt[i + 1] === '\n') i++; l.push(v); out.push(l); l = []; v = ''; }
+      else v += c;
+    }
+    if (v || l.length) { l.push(v); out.push(l); }
+    return { linhas: out };
+  },
+  async unzip(b) {
+    const dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+    let e = b.length - 22;
+    while (e >= 0 && dv.getUint32(e, true) !== 0x06054b50) e--;
+    if (e < 0) throw new Error('Arquivo .xlsx danificado.');
+    const n = dv.getUint16(e + 10, true);
+    let p = dv.getUint32(e + 16, true);
+    const arqs = {};
+    for (let i = 0; i < n; i++) {
+      const met = dv.getUint16(p + 10, true), tam = dv.getUint32(p + 20, true);
+      const nl = dv.getUint16(p + 28, true), xl = dv.getUint16(p + 30, true), cl = dv.getUint16(p + 32, true);
+      const off = dv.getUint32(p + 42, true);
+      const nome = new TextDecoder().decode(b.subarray(p + 46, p + 46 + nl));
+      arqs[nome] = { met, off, tam };
+      p += 46 + nl + xl + cl;
+    }
+    return async (nome) => {
+      const a = arqs[nome] || arqs[Object.keys(arqs).find((k) => k.toLowerCase() === nome.toLowerCase())];
+      if (!a) return null;
+      const ini = a.off + 30 + dv.getUint16(a.off + 26, true) + dv.getUint16(a.off + 28, true);
+      const dado = b.subarray(ini, ini + a.tam);
+      if (a.met === 0) return new TextDecoder().decode(dado);
+      if (typeof DecompressionStream === 'undefined') throw new Error('Este navegador não abre .xlsx. Atualize o navegador ou use .csv.');
+      const s = new Blob([dado]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+      return new TextDecoder().decode(await new Response(s).arrayBuffer());
+    };
+  },
+  async xlsx(buf) {
+    const lerZ = await Arq.unzip(buf);
+    const xml = async (n) => { const t = await lerZ(n); return t ? new DOMParser().parseFromString(t, 'application/xml') : null; };
+    const tags = (d, n) => [...d.getElementsByTagNameNS('*', n)];
+    const wb = await xml('xl/workbook.xml');
+    if (!wb) throw new Error('Isso não parece uma planilha .xlsx.');
+    const rels = await xml('xl/_rels/workbook.xml.rels');
+    const alvo = (id) => {
+      const r = tags(rels, 'Relationship').find((x) => x.getAttribute('Id') === id);
+      const t = r ? r.getAttribute('Target') : '';
+      return t.startsWith('/') ? t.slice(1) : 'xl/' + t;
+    };
+    const ss = await xml('xl/sharedStrings.xml');
+    const strs = ss ? tags(ss, 'si').map((si) => tags(si, 't').map((t) => t.textContent).join('')) : [];
+    // células com formato de data viram dd/mm/aaaa
+    const sty = await xml('xl/styles.xml');
+    const fmtData = new Set([14, 15, 16, 17, 22, 45, 46, 47]);
+    if (sty) tags(sty, 'numFmt').forEach((f) => { if (/[dy]/i.test((f.getAttribute('formatCode') || '').replace(/\[[^\]]*\]|"[^"]*"/g, ''))) fmtData.add(+f.getAttribute('numFmtId')); });
+    const cx = sty && tags(sty, 'cellXfs')[0];
+    const xfs = cx ? tags(cx, 'xf') : [];
+    const ehData = (s) => xfs[s] && fmtData.has(+xfs[s].getAttribute('numFmtId'));
+    const data = (n) => {
+      const d = new Date(Math.round((n - 25569) * 864e5)); const p2 = (x) => String(x).padStart(2, '0');
+      const dt = `${p2(d.getUTCDate())}/${p2(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`;
+      return n % 1 ? `${dt} ${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())}` : dt;
+    };
+    const col = (ref) => { let c = 0; for (const ch of ref.replace(/\d+/g, '')) c = c * 26 + ch.charCodeAt(0) - 64; return c - 1; };
+    const RNS = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+    const lerAba = async (sh) => {
+      const d = await xml(alvo(sh.getAttributeNS(RNS, 'id') || sh.getAttribute('r:id')));
+      if (!d) return [];
+      const out = [];
+      for (const row of tags(d, 'row')) {
+        const l = []; let k = 0;
+        for (const c of tags(row, 'c')) {
+          const r = c.getAttribute('r'); if (r) k = col(r);
+          const t = c.getAttribute('t'); const v = tags(c, 'v')[0]?.textContent ?? '';
+          let val;
+          if (t === 's') val = strs[+v] ?? '';
+          else if (t === 'inlineStr') val = tags(c, 't').map((x) => x.textContent).join('');
+          else if (t === 'b') val = v === '1' ? 'VERDADEIRO' : 'FALSO';
+          else if (v !== '' && !t && ehData(+(c.getAttribute('s') || 0))) val = data(+v);
+          else val = v;
+          l[k++] = val;
+        }
+        const ri = +(row.getAttribute('r') || out.length + 1) - 1;
+        out[ri] = Array.from(l, (x) => x ?? '');
+      }
+      return Array.from(out, (x) => x || []);
+    };
+    const sheets = tags(wb, 'sheet');
+    const qs = sheets.find((x) => norm(x.getAttribute('name')) === norm(ABA_Q));
+    const princ = sheets.find((x) => x !== qs) || sheets[0];
+    let quartos = null;
+    if (qs) {
+      const q = await lerAba(qs);
+      if (q.length > 1) quartos = { cab: q[0].map(String), linhas: q.slice(1).filter((l) => l.some(Boolean)).map((l) => q[0].map((_, i) => String(l[i] ?? ''))) };
+    }
+    return { aba: princ.getAttribute('name'), linhas: await lerAba(princ), quartos };
+  },
+
+  /* --- gravar .xlsx (zip sem compressão) --- */
+  crcT: null,
+  crc(b) {
+    if (!Arq.crcT) {
+      Arq.crcT = new Uint32Array(256);
+      for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; Arq.crcT[n] = c >>> 0; }
+    }
+    let c = 0xffffffff;
+    for (const x of b) c = Arq.crcT[(c ^ x) & 255] ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  },
+  zip(arqs) {
+    const enc = new TextEncoder(); const partes = []; const cent = []; let off = 0;
+    const pr = (dv, campos) => campos.forEach(([o, v, t]) => (t === 4 ? dv.setUint32(o, v, true) : dv.setUint16(o, v, true)));
+    for (const [nome, txt] of Object.entries(arqs)) {
+      const n = enc.encode(nome), d = enc.encode(txt), crc = Arq.crc(d);
+      const h = new DataView(new ArrayBuffer(30));
+      pr(h, [[0, 0x04034b50, 4], [4, 20, 2], [6, 0x800, 2], [8, 0, 2], [10, 0, 2], [12, 0x21, 2], [14, crc, 4], [18, d.length, 4], [22, d.length, 4], [26, n.length, 2], [28, 0, 2]]);
+      const c = new DataView(new ArrayBuffer(46));
+      pr(c, [[0, 0x02014b50, 4], [4, 20, 2], [6, 20, 2], [8, 0x800, 2], [10, 0, 2], [12, 0, 2], [14, 0x21, 2], [16, crc, 4], [20, d.length, 4], [24, d.length, 4], [28, n.length, 2], [42, off, 4]]);
+      partes.push(h, n, d); cent.push(c, n);
+      off += 30 + n.length + d.length;
+    }
+    const tamC = cent.reduce((s, x) => s + x.byteLength, 0);
+    const qtd = Object.keys(arqs).length;
+    const e = new DataView(new ArrayBuffer(22));
+    pr(e, [[0, 0x06054b50, 4], [8, qtd, 2], [10, qtd, 2], [12, tamC, 4], [16, off, 4]]);
+    return new Blob([...partes, ...cent, e], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  },
+  gerarXlsx(abas) { // abas: [{ nome, cab, linhas }]
+    const x = (v) => String(v ?? '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const letra = (i) => { let s = ''; i++; while (i) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; };
+    const nomeAba = (n) => x(String(n).replace(/[\\/?*[\]:]/g, ' ').slice(0, 31) || 'Planilha');
+    const NS = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+    const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+    const PR = 'http://schemas.openxmlformats.org/package/2006/relationships';
+    const XD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+    const f = {
+      '[Content_Types].xml': `${XD}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${abas.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}</Types>`,
+      '_rels/.rels': `${XD}<Relationships xmlns="${PR}"><Relationship Id="rId1" Type="${R}/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
+      'xl/workbook.xml': `${XD}<workbook xmlns="${NS}" xmlns:r="${R}"><sheets>${abas.map((a, i) => `<sheet name="${nomeAba(a.nome)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('')}</sheets></workbook>`,
+      'xl/_rels/workbook.xml.rels': `${XD}<Relationships xmlns="${PR}">${abas.map((_, i) => `<Relationship Id="rId${i + 1}" Type="${R}/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('')}<Relationship Id="rId${abas.length + 1}" Type="${R}/styles" Target="styles.xml"/></Relationships>`,
+      'xl/styles.xml': `${XD}<styleSheet xmlns="${NS}"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border/></borders><cellStyleXfs count="1"><xf/></cellStyleXfs><cellXfs count="2"><xf fontId="0"/><xf fontId="1" applyFont="1"/></cellXfs></styleSheet>`,
+    };
+    abas.forEach((a, i) => {
+      const linha = (l, r, neg) => `<row r="${r}">${l.map((v, c) => (String(v ?? '') === '' ? '' : `<c r="${letra(c)}${r}" t="inlineStr"${neg ? ' s="1"' : ''}><is><t xml:space="preserve">${x(v)}</t></is></c>`)).join('')}</row>`;
+      f[`xl/worksheets/sheet${i + 1}.xml`] = `${XD}<worksheet xmlns="${NS}"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><sheetData>${linha(a.cab, 1, true)}${a.linhas.map((l, j) => linha(l, j + 2)).join('')}</sheetData></worksheet>`;
+    });
+    return Arq.zip(f);
+  },
+};
+
+/* Junta o arquivo novo com o que já está no aparelho, pelo Código:
+ * o que foi feito na recepção (check-in, pagamento, quarto, cadastros "R…") não se perde. */
+function juntarDados(velho, novo) {
+  const cab = [...novo.cab], linhas = novo.linhas.map((l) => [...l]);
+  const vc = velho.cab;
+  const ci = (cb, re) => cb.map(norm).findIndex((h) => re.test(h));
+  const kN = ci(cab, /^codigo$/), kV = ci(vc, /^codigo$/);
+  if (kN < 0 || kV < 0) return null;
+  const preservar = Object.values(SIS);
+  garantirEm(cab, linhas, preservar.filter((c) => vc.includes(c)));
+  const uN = ci(cab, /^usado$/), uV = ci(vc, /^usado$/), sN = ci(cab, /^status$/), sV = ci(vc, /^status$/);
+  const porCod = new Map(linhas.map((l) => [String(l[kN]).trim(), l]));
+  let juntados = 0, novos = 0;
+  for (const lv of velho.linhas) {
+    const cod = String(lv[kV] ?? '').trim();
+    if (!cod) continue;
+    let ln = porCod.get(cod);
+    if (!ln) { // só existia no aparelho (ex.: cadastro feito na recepção)
+      ln = cab.map((h) => { const j = vc.indexOf(h); return j >= 0 ? String(lv[j] ?? '') : ''; });
+      linhas.push(ln); porCod.set(cod, ln); novos++; continue;
+    }
+    let mudou = false;
+    for (const c of preservar) {
+      const j = vc.indexOf(c), k = cab.indexOf(c);
+      if (j >= 0 && k >= 0 && String(lv[j] ?? '') && !String(ln[k] ?? '')) { ln[k] = lv[j]; mudou = true; }
+    }
+    if (uN >= 0 && uV >= 0 && norm(lv[uV]) === 'usado' && norm(ln[uN]) !== 'usado') { ln[uN] = lv[uV]; mudou = true; }
+    if (sN >= 0 && sV >= 0 && /^(pago|aprovado)/.test(norm(lv[sV])) && !/^(pago|aprovado)/.test(norm(ln[sN]))) { ln[sN] = lv[sV]; mudou = true; }
+    if (mudou) juntados++;
+  }
+  return { cab, linhas, juntados, novos };
+}
+
+async function importarArquivo(file) {
+  if (!file) return;
+  let t;
+  try { t = await Arq.ler(file); } catch (e) { toast(e.message || 'Não consegui ler esse arquivo.', 'erro'); return; }
+  const m = mapear(t.cab);
+  if (m.nome < 0 && m.comprador < 0 && m.codigo < 0) { toast('Não achei as colunas de nome ou código nesse arquivo. É a planilha de inscritos?', 'erro'); return; }
+  const velho = cfg.local ? ler(K.local, null) : null;
+  const vAba = velho && velho.abas && velho.abas[velho.aba];
+  let modo = 'substituir';
+  if (vAba && vAba.linhas.length) {
+    modo = await folha({
+      titulo: 'Já tem uma planilha aberta',
+      corpo: `<p>O arquivo <b>${esc(file.name)}</b> tem <b>${t.linhas.length}</b> registros. Neste aparelho há <b>${vAba.linhas.length}</b>.</p>
+        <p><b>Juntar</b> (recomendado): usa o arquivo novo e mantém o que foi feito aqui — check-ins, pagamentos, quartos e cadastros da recepção.
+        Serve para pegar inscrições novas ou para juntar a planilha baixada de outro celular.</p>
+        <p class="muted peq"><b>Substituir</b> apaga o que está neste aparelho e fica só com o arquivo novo.</p>`,
+      botoes: [{ v: 'substituir', t: 'Substituir', cls: 'perigo' }, { v: 'juntar', t: 'Juntar', cls: 'primario' }],
+    });
+    if (!modo) return;
+  }
+  if (st.fila.length) await enviarFila();
+  let cab = t.cab, linhas = t.linhas, msg = `${t.linhas.length} registros carregados.`;
+  if (modo === 'juntar') {
+    const j = juntarDados({ cab: vAba.cab, linhas: vAba.linhas }, t);
+    if (!j) { toast('Sem a coluna "Código" não dá para juntar. Use Substituir.', 'erro'); return; }
+    ({ cab, linhas } = j);
+    msg = `${linhas.length} registros · ${j.juntados} completados com o que já estava aqui${j.novos ? ` · ${j.novos} cadastros deste aparelho mantidos` : ''}.`;
+  }
+  const abas = { [t.aba]: { cab, linhas } };
+  const q = t.quartos || (velho && velho.abas && velho.abas[ABA_Q]);
+  if (q) abas[ABA_Q] = { cab: [...q.cab], linhas: q.linhas.map((l) => [...l]) };
+  try {
+    localStorage.setItem(K.local, JSON.stringify({ planilha: file.name.replace(/\.(xlsx|csv|txt)$/i, ''), aba: t.aba, abas, abertoEm: agora() }));
+  } catch { toast('A memória do navegador está cheia.', 'erro'); return; }
+  Object.assign(cfg, { local: true, demo: false, url: '', chave: '', planilha: '', aba: '', mapa: {} });
+  salvarCfg();
+  st.base = null; st.fila = []; salvarFila(); st.guia = null; st.erro = null; localStorage.removeItem(K.cache);
+  await recarregar();
+  if (st.base) { comemorar('Planilha aberta!'); toast(msg, 'ok'); irPara('recepcao'); }
+}
+
+async function baixarPlanilha() {
+  if (st.fila.length) await enviarFila();
+  const d = ler(K.local, null);
+  if (!d) return;
+  const abas = Object.entries(d.abas).map(([nome, a]) => ({ nome, cab: a.cab, linhas: a.linhas }));
+  const blob = Arq.gerarXlsx(abas);
+  const base = (d.planilha || 'encontro').replace(/ - atualizada.*$/, '').replace(/[^\w\-. ]+/g, '').trim() || 'encontro';
+  const nome = `${base} - atualizada ${agora().replace(/\//g, '-').replace(':', 'h')}${cfg.atendente ? ' - ' + cfg.atendente.replace(/[^\w\- ]+/g, '').trim() : ''}.xlsx`;
+  // No celular, abre o "compartilhar" (WhatsApp, Drive, e-mail…); no PC, baixa.
+  if (matchMedia('(pointer: coarse)').matches && navigator.canShare) {
+    const arq = new File([blob], nome, { type: blob.type });
+    if (navigator.canShare({ files: [arq] })) {
+      try { await navigator.share({ files: [arq], title: nome }); return; } catch (e) { if (e.name === 'AbortError') return; }
+    }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = nome;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  toast('Planilha baixada.', 'ok');
+}
+
 /* ================= modo demonstração ================= */
 const Demo = {
   carregar() {
+    if (cfg.local) { const l = ler(K.local, null); if (!l) throw new Error('Nenhum arquivo aberto neste aparelho. Vá em Ajustes → Abrir arquivo.'); return l; }
     const d = ler(K.demo, null);
     if (d && (d.cab || d.abas)) return d;
     const n = Demo.gerar();
@@ -1617,10 +1910,11 @@ const Demo = {
   },
   // Simula a planilha com várias abas: { planilha, aba (principal), abas: { nome: { cab, linhas } } }
   async api(acao, p) {
-    await new Promise((r) => setTimeout(r, 120));
+    if (cfg.demo) await new Promise((r) => setTimeout(r, 120));
     const d = Demo.carregar();
     if (!d.abas) { d.abas = { [d.aba]: { cab: d.cab, linhas: d.linhas } }; delete d.cab; delete d.linhas; }
-    const salvar = () => gravarLS(K.demo, d);
+    const chave = cfg.local ? K.local : K.demo;
+    const salvar = () => { try { localStorage.setItem(chave, JSON.stringify(d)); } catch { throw new Error('Memória do navegador cheia.'); } };
     if (acao === 'garantirAba') {
       if (!d.abas[p.nome]) { d.abas[p.nome] = { cab: [...p.cabecalho], linhas: p.linhas.map((l) => l.map(String)) }; salvar(); }
       return { ok: true };
@@ -1659,7 +1953,7 @@ const Demo = {
   if (location.hash === '#naopagos') st.filtro = 'naopagos';
   // Abre na hora com os dados guardados no aparelho; depois atualiza pela internet.
   const cache = ler(K.cache, null);
-  if (configurado() && !cfg.demo && cache && cache.url === cfg.url && cache.cabecalho) {
+  if (configurado() && !semNuvem() && cache && cache.url === cfg.url && cache.cabecalho) {
     usarBase(cache);
     st.carregadoEm = cache.em ? new Date(cache.em) : null;
   }

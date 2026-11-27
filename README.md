@@ -36,7 +36,19 @@ Um Apps Script instalado na própria planilha ([apps-script/Codigo.gs](apps-scri
 - Atualiza sozinho a cada 30 s, para ver o trabalho das outras mesas e as novas compras no app.
 - No PC vira layout de site, com navegação no topo e a lista em grade.
 
-## Como colocar no ar (uma vez)
+## Jeito mais simples: abrir o arquivo
+
+Em **Ajustes → Abrir planilha**, escolha o `.xlsx` ou `.csv` exportado do site de ingressos. Pronto: sem Google, sem script.
+
+- Tudo o que é feito (check-in, pagamento, quarto, cadastro) fica salvo **naquele aparelho**, mesmo sem internet.
+- **Baixar planilha atualizada (.xlsx)**: gera a planilha com tudo o que foi feito (aba de inscritos + aba Quartos). No celular abre o compartilhar (WhatsApp, Drive…).
+- **Abrir arquivo novo → Juntar**: usa o arquivo novo e mantém o que foi feito no aparelho (pelo Código). Serve para pegar
+  inscrições novas do site ou para juntar a planilha baixada de outro celular.
+- Se colarem o link de uma Planilha Google, o app explica como baixá-la como .xlsx.
+
+Para vários celulares vendo a **mesma** planilha ao vivo, use o modo Google abaixo.
+
+## Modo Google (vários celulares sincronizados)
 
 1. Planilha: envie o `.xlsx` exportado ao Google Drive e abra como Planilhas Google.
 2. Na planilha, abra **Extensões → Apps Script**, cole `apps-script/Codigo.gs` e salve.
@@ -78,6 +90,7 @@ Pode ser editada direto na planilha. Sexo vazio = misto. O quarto de cada pessoa
 
 ## Versões
 
+- **2.2.0**: abrir a planilha direto do arquivo (.xlsx/.csv), sem Google; baixar planilha atualizada (.xlsx); juntar arquivo novo ou de outro celular.
 - **2.1.1**: colar o link da planilha (ou do script) em "Conectar" mostra o passo a passo de instalação em vez de "link inválido".
 - **2.1.0**: alocação de quartos (tela Quartos, distribuição automática, quarto no check-in, na ficha, no cadastro
   e no painel). Apps Script ganhou `atualizarVarios` (gravação em lote), `garantirAba` e leitura de abas extras.

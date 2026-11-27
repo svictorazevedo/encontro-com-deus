@@ -364,3 +364,5 @@ dialog.folha::backdrop { background: rgba(12, 10, 25, .45); }
   .quartos-grade { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
   .folha .quartos-grade { grid-template-columns: repeat(3, 1fr); }
 }
+
+.btn.grande { min-height: 56px; font-size: 1.05rem; }
