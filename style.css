@@ -366,3 +366,7 @@ dialog.folha::backdrop { background: rgba(12, 10, 25, .45); }
 }
 
 .btn.grande { min-height: 56px; font-size: 1.05rem; }
+.codigo-evento { display: block; width: 100%; margin-top: 14px; padding: 12px 14px; border: 1px dashed var(--borda); border-radius: 14px;
+  background: transparent; color: var(--muted); font: inherit; font-size: .85rem; text-align: center; cursor: pointer; }
+.codigo-evento b { display: block; margin-top: 4px; color: var(--txt); font-size: 1.45rem; letter-spacing: .08em; font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.codigo-input { text-transform: uppercase; letter-spacing: .08em; text-align: center; font-size: 1.15rem !important; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }

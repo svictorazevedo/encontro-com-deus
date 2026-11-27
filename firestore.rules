@@ -1,0 +1,18 @@
+rules_version = '2';
+
+// Encontro com Deus: cada evento é acessado por quem conhece o código dele (id do documento).
+// Não é possível listar eventos: sem o código, não se chega aos dados.
+// (Publicado no console do Firebase → Firestore → Regras. Mantenha esta cópia igual.)
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /eventos/{ev} {
+      allow get, update: if request.auth != null;
+      allow create: if request.auth != null && ev.size() >= 16;
+      allow list, delete: if false;
+
+      match /{col}/{id} {
+        allow read, write: if request.auth != null && col in ['pessoas', 'quartos'];
+      }
+    }
+  }
+}

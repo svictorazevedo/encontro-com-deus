@@ -1,11 +1,11 @@
-/* Encontro com Deus — Painel e Recepção  v2
- * App estático (GitHub Pages). Banco = planilha Google, via Apps Script (apps-script/Codigo.gs).
+/* Encontro com Deus — Painel e Recepção  v3
+ * App estático (GitHub Pages). Banco = Firebase/Firestore (ao vivo, offline). Também abre .xlsx/.csv e o antigo modo Google (Apps Script).
  * Ações gravam primeiro no aparelho (resposta instantânea) e vão para a planilha por uma fila,
  * que aguenta internet ruim: se cair, as ações esperam e são reenviadas sozinhas.
  */
 'use strict';
 
-const VERSAO = '2.2.0';
+const VERSAO = '3.0.0';
 const K = { cfg: 'encontro.cfg.v1', demo: 'encontro.demo.v1', fila: 'encontro.fila.v1', cache: 'encontro.cache.v1', local: 'encontro.local.v1' };
 const SITE = location.origin + location.pathname;
 
@@ -51,11 +51,11 @@ const vibrar = (p) => { try { navigator.vibrate && navigator.vibrate(p); } catch
 /* ================= configuração ================= */
 const PADRAO = {
   url: '', planilha: '', aba: '', chave: '', atendente: '', evento: '',
-  valorPadrao: '145', metodosRecepcao: 'Externo, Manual, Dinheiro', mapa: {}, demo: false, local: false, nomePlanilha: '',
+  valorPadrao: '145', metodosRecepcao: 'Externo, Manual, Dinheiro', mapa: {}, demo: false, local: false, ev: '', nomePlanilha: '',
 };
 let cfg = { ...PADRAO, ...ler(K.cfg, {}) };
 const salvarCfg = () => gravarLS(K.cfg, cfg);
-const configurado = () => cfg.demo || cfg.local || !!(cfg.url && cfg.chave);
+const configurado = () => cfg.demo || cfg.local || !!cfg.ev || !!(cfg.url && cfg.chave);
 const semNuvem = () => cfg.demo || cfg.local; // dados só no aparelho
 
 const CAMPOS = [
@@ -122,6 +122,7 @@ const st = {
 class ErroRede extends Error {}
 
 async function api(acao, dados = {}) {
+  if (cfg.ev && !semNuvem()) return Nuvem.api(acao, dados);
   if (semNuvem()) return Demo.api(acao, dados);
   if (!cfg.url) throw new Error('Aparelho não conectado. Vá em Ajustes.');
   const corpo = JSON.stringify({ acao, chave: cfg.chave, planilha: cfg.planilha, aba: cfg.aba, ...dados });
@@ -244,7 +245,7 @@ function aplicarLocal(op) {
 
 function salvarCache() {
   if (semNuvem() || !st.base) return;
-  gravarLS(K.cache, { ...st.base, em: st.carregadoEm && st.carregadoEm.toISOString(), url: cfg.url });
+  gravarLS(K.cache, { ...st.base, em: st.carregadoEm && st.carregadoEm.toISOString(), url: cfg.ev || cfg.url });
 }
 
 function usarBase(b) {
@@ -1197,17 +1198,27 @@ function cartaoConectar() {
   if (st.guia) return cartaoGuia();
   const anterior = !cfg.local && ler(K.local, null);
   return `<div class="cartao">
-    <h2>Começar</h2>
-    <p class="muted">Abra a planilha de inscritos (o arquivo <b>.xlsx</b> ou <b>.csv</b> exportado do site de ingressos). Pronto, já dá para usar.</p>
+    <h2>Entrar no evento</h2>
+    <p class="muted">Digite o código que o responsável enviou (ou abra o link que ele mandou no WhatsApp).</p>
     <div class="form">
-      <button class="btn primario bloco grande" data-acao="abrirArquivo">📂 Abrir planilha (.xlsx ou .csv)</button>
-      ${anterior ? `<button class="btn bloco" data-acao="voltarLocal">Voltar para “${esc(anterior.planilha || 'arquivo aberto')}”</button>` : ''}
+      <input id="codigoEvento" class="codigo-input" placeholder="ABCD-EFGH-JKLM-NPQR" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go">
+      <button class="btn primario bloco grande" data-acao="entrarEvento">Entrar</button>
+    </div>
+  </div>
+  <div class="cartao">
+    <h2>Criar um evento</h2>
+    <p class="muted">Para o responsável: abra a planilha de inscritos (<b>.xlsx</b> ou <b>.csv</b> exportada do site de ingressos).
+      Ela vai para o banco e você recebe o código para enviar à equipe. Todos trabalham juntos, ao vivo.</p>
+    <div class="form">
+      <button class="btn bloco grande" data-acao="criarEvento">📂 Criar evento com a planilha</button>
       <button class="btn bloco" data-acao="ativarDemo">Ver demonstração com dados fictícios</button>
     </div>
-    <details class="avancado" style="margin-top:14px"><summary>Tenho um link de conexão (vários celulares na mesma planilha Google)</summary>
+    <details class="avancado" style="margin-top:14px"><summary>Outras opções</summary>
       <div class="form" style="margin-top:10px">
-        <input id="colarLink" placeholder="Cole o link de conexão" autocomplete="off">
-        <button class="btn bloco" data-acao="usarLink">Conectar</button>
+        ${anterior ? `<button class="btn bloco" data-acao="voltarLocal">Voltar para “${esc(anterior.planilha || 'arquivo aberto')}” (só neste aparelho)</button>` : ''}
+        <button class="btn bloco" data-acao="abrirArquivo">Abrir planilha só neste aparelho, sem banco</button>
+        <input id="colarLink" placeholder="Link de conexão do modo Google (#conectar=…)" autocomplete="off">
+        <button class="btn bloco" data-acao="usarLink">Conectar pelo modo Google</button>
       </div>
     </details>
   </div>`;
@@ -1243,21 +1254,21 @@ function cartaoGuia() {
     <ol class="passos">
       <li>Abra a planilha${g.url ? ` (<a href="${esc(g.url)}" target="_blank" rel="noopener">abrir</a>)` : ''}.</li>
       <li>No computador: <b>Arquivo → Fazer download → Microsoft Excel (.xlsx)</b>.<br>No app do celular: <b>⋮ → Compartilhar e exportar → Salvar como → Excel</b>.</li>
-      <li>Volte aqui e toque em <b>Abrir planilha</b>.</li>
+      <li>Volte aqui e toque em <b>Criar evento com a planilha</b>.</li>
     </ol>
-    <div class="form" style="margin-top:12px"><button class="btn primario bloco grande" data-acao="abrirArquivo">📂 Abrir planilha (.xlsx ou .csv)</button></div>`}
+    <div class="form" style="margin-top:12px"><button class="btn primario bloco grande" data-acao="criarEvento">📂 Criar evento com a planilha</button></div>`}
     <div class="form" style="margin-top:8px"><button class="btn bloco" data-acao="fecharGuia">Voltar</button></div>
   </div>`;
 }
 
 function renderAjustes() {
   const el = $('#tela-ajustes');
-  const conectado = configurado() && !cfg.demo && !cfg.local;
+  const conectado = configurado() && !cfg.demo && !cfg.local && !cfg.ev;
   const instalado = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
   const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
   el.innerHTML = `
     ${cfg.demo ? `<div class="aviso">Você está no <b>modo demonstração</b>. Para usar de verdade, abra a planilha de inscritos abaixo.</div>` : ''}
-    ${conectado ? `
+    ${cfg.ev ? cartaoEvento() : conectado ? `
       <div class="cartao">
         <div class="estado">
           <div class="bola ${st.erro ? 'erro' : ''}"><svg viewBox="0 0 24 24">${st.erro ? '<path d="M12 8v5M12 16.5v.5"/><circle cx="12" cy="12" r="9"/>' : '<path d="M5 12.5l4.5 4.5L19 7.5"/>'}</svg></div>
@@ -1275,9 +1286,9 @@ function renderAjustes() {
         : `<div class="muted peq">Para usar como aplicativo: ${ios ? 'no Safari, toque em <b>Compartilhar</b> → <b>Adicionar à Tela de Início</b>.' : 'no menu do navegador (⋮), toque em <b>Instalar app</b> ou <b>Adicionar à tela inicial</b>.'}</div>`}
     </div>` : ''}
 
-    <div class="cartao">
-      <details class="avancado" ${!configurado() ? '' : ''}><summary>Configuração avançada</summary>
-        <form id="formAvancado" class="form" style="margin-top:12px">
+    ${cfg.ev && !st.cab.length ? '' : `<div class="cartao">
+      <details class="avancado"><summary>Configuração avançada</summary>
+        ${cfg.ev ? '' : `<form id="formAvancado" class="form" style="margin-top:12px">
           <label class="campo">URL do Apps Script (termina em /exec)<input name="url" value="${esc(cfg.url)}" placeholder="https://script.google.com/macros/s/…/exec"></label>
           <label class="campo">Chave de acesso<input name="chave" type="password" value="${esc(cfg.chave)}" autocomplete="off"></label>
           <label class="campo">Link da planilha <span class="muted" style="font-weight:400">(vazio = a planilha onde o script foi instalado)</span><input name="planilha" value="${esc(cfg.planilha)}" placeholder="https://docs.google.com/spreadsheets/d/…"></label>
@@ -1288,7 +1299,7 @@ function renderAjustes() {
           </div>
           <label class="campo">Métodos da planilha que contam como "pago na recepção" (vírgula)<input name="metodosRecepcao" value="${esc(cfg.metodosRecepcao)}"></label>
           <button class="btn primario bloco" type="submit">Salvar e testar conexão</button>
-        </form>
+        </form>`}
         ${st.cab.length ? `
           <h3 style="margin-top:20px">Colunas da planilha</h3>
           <p class="muted peq">Reconhecidas automaticamente pelo nome. Ajuste só se algo não bater.</p>
@@ -1302,13 +1313,13 @@ function renderAjustes() {
           }).join('')}</div>
           <div class="linha-botoes" style="margin-top:12px">
             <button class="btn" data-acao="salvarMapa">Salvar colunas</button>
-            <button class="btn" data-acao="prepararColunas">Criar colunas de controle</button>
+            ${cfg.ev ? '' : '<button class="btn" data-acao="prepararColunas">Criar colunas de controle</button>'}
           </div>` : ''}
       </details>
-    </div>
+    </div>`}
 
-    <div class="cartao">
-      <details class="avancado"><summary>Instalar o Apps Script na planilha (responsável)</summary>
+    ${cfg.ev ? '' : `<div class="cartao">
+      <details class="avancado"><summary>Modo Google: instalar o Apps Script na planilha</summary>
         <ol class="passos">
           <li>Abra a planilha no Google Planilhas → <b>Extensões → Apps Script</b>.</li>
           <li>Apague o conteúdo, cole o código (botão abaixo) e salve.</li>
@@ -1318,11 +1329,11 @@ function renderAjustes() {
         <div class="linha-botoes"><button class="btn" data-acao="copiarScript">Copiar código</button>
           <a class="btn" href="apps-script/Codigo.gs" target="_blank" rel="noopener">Ver arquivo</a></div>
       </details>
-    </div>
+    </div>`}
 
     <div class="cartao linha-botoes">
       ${cfg.demo ? '<button class="btn" data-acao="resetarDemo">Recriar dados fictícios</button>' : '<button class="btn" data-acao="ativarDemo">Modo demonstração</button>'}
-      ${configurado() ? `<button class="btn perigo" data-acao="desconectar">${cfg.local ? 'Fechar planilha e apagar do aparelho' : 'Desconectar este aparelho'}</button>` : ''}
+      ${configurado() ? `<button class="btn perigo" data-acao="desconectar">${cfg.ev ? 'Sair do evento neste aparelho' : cfg.local ? 'Fechar planilha e apagar do aparelho' : 'Desconectar este aparelho'}</button>` : ''}
       <span class="muted peq" style="margin-left:auto">v${VERSAO}</span>
     </div>`;
 }
@@ -1362,7 +1373,7 @@ async function conectarComLink(texto) {
   });
   history.replaceState(null, '', location.pathname + '#recepcao');
   if (!r) { renderizar(); return; }
-  Object.assign(cfg, { url: d.u, chave: d.k, planilha: d.p || '', aba: d.a || '', nomePlanilha: d.n || '', demo: false, mapa: {}, atendente: r.dados.atendente });
+  Object.assign(cfg, { url: d.u, chave: d.k, planilha: d.p || '', aba: d.a || '', nomePlanilha: d.n || '', demo: false, local: false, ev: '', mapa: {}, atendente: r.dados.atendente });
   salvarCfg();
   st.base = null; st.fila = []; salvarFila(); localStorage.removeItem(K.cache);
   await recarregar();
@@ -1370,6 +1381,17 @@ async function conectarComLink(texto) {
 }
 
 async function desconectar() {
+  if (cfg.ev) {
+    const pend = Nuvem.pendente() || !navigator.onLine;
+    if (!await confirmar('Sair do evento',
+      `<p>Este aparelho sai do evento e apaga a cópia dos dados guardada nele. <b>Os dados continuam no banco</b> para o resto da equipe; para voltar, é só entrar com o código.</p>${pend ? '<div class="aviso erro"><b>Há alterações ainda não enviadas</b> (sem internet). Se sair agora, elas se perdem.</div>' : ''}`,
+      'Sair')) return;
+    await Nuvem.sair();
+    [K.cfg, K.cache, K.fila].forEach((k) => localStorage.removeItem(k));
+    location.replace(location.pathname + '#ajustes');
+    location.reload();
+    return;
+  }
   const pend = st.fila.length;
   if (!await confirmar('Desconectar aparelho',
     `<p>${cfg.local ? 'Apaga deste aparelho os dados do arquivo <b>e tudo o que foi feito nele</b> (check-ins, pagamentos, quartos). Baixe a planilha atualizada antes.' : 'Remove a conexão e os dados guardados neste aparelho. A planilha não é alterada.'}</p>${pend ? `<div class="aviso erro"><b>${pend} ação(ões) ainda não foram enviadas</b> e serão perdidas.</div>` : ''}`,
@@ -1459,10 +1481,16 @@ function girar(on) { $$('[data-acao="recarregar"]').forEach((b) => b.classList.t
 function atualizarStatus() {
   const s = $('#statusSync');
   s.className = 'sync';
-  $('#faixaOffline').hidden = !(st.offline && configurado() && !semNuvem());
+  $('#faixaOffline').hidden = !((st.offline || (cfg.ev && !navigator.onLine)) && configurado() && !semNuvem());
   if (!configurado()) { s.textContent = 'não conectado'; return; }
   if (cfg.demo) { s.textContent = 'demonstração'; s.classList.add('ok'); return; }
   if (cfg.local) { s.textContent = 'salvo neste aparelho'; s.classList.add('ok'); return; }
+  if (cfg.ev) {
+    if (st.erro) { s.classList.add('offline'); s.textContent = 'erro no banco'; return; }
+    if (!navigator.onLine || st.offline) { s.classList.add('offline'); s.textContent = 'sem internet · salvando no aparelho'; return; }
+    if (Nuvem.pendente() || st.fila.length) { s.classList.add('pendente'); s.textContent = 'enviando…'; return; }
+    s.classList.add('ok'); s.textContent = st.base ? 'ao vivo' : 'conectando…'; return;
+  }
   if (st.offline) { s.classList.add('offline'); s.textContent = st.fila.length ? `sem internet · ${st.fila.length} a enviar` : 'sem internet'; return; }
   if (st.fila.length) { s.classList.add('pendente'); s.textContent = `enviando ${st.fila.length}…`; return; }
   if (st.erro) { s.classList.add('offline'); s.textContent = 'erro na planilha'; return; }
@@ -1503,6 +1531,7 @@ function renderizarSoft() {
 window.addEventListener('hashchange', (e) => {
   const h = location.hash;
   if (h.startsWith('#conectar=')) { conectarComLink(h); return; }
+  if (h.startsWith('#evento=')) { entrarEvento(h); return; }
   if (h === '#naopagos') st.filtro = 'naopagos';
   else if (String(e.oldURL).endsWith('#naopagos') && st.filtro === 'naopagos') st.filtro = 'todos';
   st.limite = 80;
@@ -1546,11 +1575,15 @@ document.addEventListener('click', async (e) => {
       try { const r = await fetch('apps-script/Codigo.gs', { cache: 'no-cache' }); await navigator.clipboard.writeText(await r.text()); toast('Código copiado. Cole no Apps Script.', 'ok'); }
       catch { toast('Não consegui copiar. Use "Ver arquivo".', 'erro'); }
       break;
-    case 'voltarLocal': Object.assign(cfg, { local: true, demo: false, mapa: {} }); salvarCfg(); st.base = null; await recarregar(); irPara('recepcao'); break;
-    case 'abrirArquivo': $('#arquivo').click(); break;
+    case 'voltarLocal': Nuvem.parar(); Object.assign(cfg, { local: true, demo: false, ev: '', mapa: {} }); salvarCfg(); st.base = null; await recarregar(); irPara('recepcao'); break;
+    case 'abrirArquivo': st.modoArquivo = 'local'; $('#arquivo').click(); break;
+    case 'criarEvento': st.modoArquivo = 'criar'; $('#arquivo').click(); break;
+    case 'importarEvento': st.modoArquivo = 'importar'; $('#arquivo').click(); break;
+    case 'entrarEvento': entrarEvento($('#codigoEvento').value); break;
+    case 'mostrarCodigo': mostrarCodigo(); break;
     case 'baixarPlanilha': baixarPlanilha(); break;
     case 'fecharGuia': st.guia = null; renderAjustes(); break;
-    case 'ativarDemo': cfg.demo = true; cfg.local = false; salvarCfg(); st.base = null; await recarregar(); irPara('painel'); toast('Modo demonstração: dados fictícios.'); break;
+    case 'ativarDemo': Nuvem.parar(); cfg.demo = true; cfg.local = false; cfg.ev = ''; salvarCfg(); st.base = null; await recarregar(); irPara('painel'); toast('Modo demonstração: dados fictícios.'); break;
     case 'resetarDemo': localStorage.removeItem(K.demo); await recarregar(); toast('Dados fictícios recriados.', 'ok'); break;
     case 'desconectar': desconectar(); break;
     case 'distribuir': distribuir(); break;
@@ -1582,19 +1615,31 @@ busca.addEventListener('keydown', (e) => {
 });
 $('#limparBusca').addEventListener('click', () => { busca.value = ''; st.busca = ''; $('#limparBusca').hidden = true; renderRecepcao(); busca.focus(); });
 
-$('#arquivo').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; importarArquivo(f); });
-window.addEventListener('online', () => { st.offline = false; enviarFila(); recarregar({ silencioso: true }); });
+$('#arquivo').addEventListener('change', (e) => {
+  const f = e.target.files[0];
+  e.target.value = '';
+  const modo = st.modoArquivo || 'local';
+  st.modoArquivo = '';
+  if (!f) return;
+  if (modo === 'criar') criarEventoComArquivo(f);
+  else if (modo === 'importar') importarNoEvento(f);
+  else importarArquivo(f);
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.id === 'codigoEvento') { e.preventDefault(); entrarEvento(e.target.value); }
+});
+window.addEventListener('online', () => { st.offline = false; enviarFila(); if (cfg.ev) atualizarStatus(); else recarregar({ silencioso: true }); });
 window.addEventListener('offline', () => { st.offline = true; atualizarStatus(); });
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); st.instalar = e; if (telaAtual() === 'ajustes') renderAjustes(); });
 
 /* Atualização automática (outras mesas, novas compras no app) */
 setInterval(() => {
-  if (document.hidden || $('#folha').open || !configurado()) return;
+  if (document.hidden || $('#folha').open || !configurado() || cfg.ev) return;
   if (telaAtual() === 'ajustes') return;
   recarregar({ silencioso: true });
 }, 30000);
 document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && configurado() && (!st.carregadoEm || Date.now() - st.carregadoEm > 15000)) recarregar({ silencioso: true });
+  if (!document.hidden && configurado() && !cfg.ev && (!st.carregadoEm || Date.now() - st.carregadoEm > 15000)) recarregar({ silencioso: true });
 });
 
 /* ================= arquivo local (.xlsx / .csv) ================= */
@@ -1837,7 +1882,8 @@ async function importarArquivo(file) {
   try {
     localStorage.setItem(K.local, JSON.stringify({ planilha: file.name.replace(/\.(xlsx|csv|txt)$/i, ''), aba: t.aba, abas, abertoEm: agora() }));
   } catch { toast('A memória do navegador está cheia.', 'erro'); return; }
-  Object.assign(cfg, { local: true, demo: false, url: '', chave: '', planilha: '', aba: '', mapa: {} });
+  Nuvem.parar();
+  Object.assign(cfg, { local: true, demo: false, ev: '', url: '', chave: '', planilha: '', aba: '', mapa: {} });
   salvarCfg();
   st.base = null; st.fila = []; salvarFila(); st.guia = null; st.erro = null; localStorage.removeItem(K.cache);
   await recarregar();
@@ -1846,12 +1892,12 @@ async function importarArquivo(file) {
 
 async function baixarPlanilha() {
   if (st.fila.length) await enviarFila();
-  const d = ler(K.local, null);
-  if (!d) return;
-  const abas = Object.entries(d.abas).map(([nome, a]) => ({ nome, cab: a.cab, linhas: a.linhas }));
+  if (!st.base) { toast('Ainda não há dados para baixar.', 'erro'); return; }
+  const abas = [{ nome: st.aba || 'Inscritos', cab: st.cab, linhas: st.linhas }];
+  if (st.q.linhas.length) abas.push({ nome: ABA_Q, cab: st.q.cab, linhas: st.q.linhas });
   const blob = Arq.gerarXlsx(abas);
-  const base = (d.planilha || 'encontro').replace(/ - atualizada.*$/, '').replace(/[^\w\-. ]+/g, '').trim() || 'encontro';
-  const nome = `${base} - atualizada ${agora().replace(/\//g, '-').replace(':', 'h')}${cfg.atendente ? ' - ' + cfg.atendente.replace(/[^\w\- ]+/g, '').trim() : ''}.xlsx`;
+  const base = (st.planilha || cfg.evento || 'encontro').replace(/ - atualizada.*$/, '').replace(/[^\w\-. À-ú]+/g, '').trim() || 'encontro';
+  const nome = `${base} - ${agora().replace(/\//g, '-').replace(':', 'h')}.xlsx`;
   // No celular, abre o "compartilhar" (WhatsApp, Drive, e-mail…); no PC, baixa.
   if (matchMedia('(pointer: coarse)').matches && navigator.canShare) {
     const arq = new File([blob], nome, { type: blob.type });
@@ -1864,6 +1910,421 @@ async function baixarPlanilha() {
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   toast('Planilha baixada.', 'ok');
+}
+
+/* ================= banco na nuvem (Firebase / Firestore) ================= */
+// Cada evento é o documento eventos/{CÓDIGO}. Quem tem o código entra (regras em firestore.rules).
+// Linhas = documentos em eventos/{ev}/pessoas e eventos/{ev}/quartos: { o: ordem, v: { c0: valor, c1: … } },
+// com os nomes das colunas em eventos/{ev}.cabPessoas / cabQuartos (só crescem, nunca reordenam).
+const FB_CONFIG = {
+  apiKey: 'AIzaSyAsvKHL0zLaAMzwjlMZ6Q3TuYK9ayNI5_8',
+  authDomain: 'encontro-com-deus-7dd79.firebaseapp.com',
+  projectId: 'encontro-com-deus-7dd79',
+  storageBucket: 'encontro-com-deus-7dd79.firebasestorage.app',
+  messagingSenderId: '879137016377',
+  appId: '1:879137016377:web:f132a65ee6bfa63c945be8',
+};
+const FB_SDK = 'https://www.gstatic.com/firebasejs/13.4.0/';
+const ALFA = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const gerarCodigo = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), (x) => ALFA[x % 32]).join('').match(/.{4}/g).join('-');
+const normCodigo = (s) => {
+  const m = String(s || '').match(/#evento=([A-Za-z0-9-]+)/);
+  const c = (m ? m[1] : String(s || '')).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return c.length === 16 ? c.match(/.{4}/g).join('-') : '';
+};
+const idDoc = (s) => (String(s ?? '').trim().replace(/\//g, '_').replace(/^\.+$/, '_').replace(/^__(.*)__$/, '_$1_').slice(0, 400)) || '_';
+const comTempo = (p, ms, msg) => Promise.race([p, new Promise((_, r) => setTimeout(() => r(new ErroRede(msg)), ms))]);
+
+const Nuvem = {
+  fb: null, db: null, ev: '', un: [], pronto: null, estado: null, _carregando: null, _t: null,
+
+  async iniciar() {
+    if (Nuvem.fb) return Nuvem.fb;
+    if (!Nuvem._carregando) {
+      Nuvem._carregando = (async () => {
+        let a, au, fs;
+        try { [a, au, fs] = await Promise.all(['app', 'auth', 'firestore'].map((m) => import(FB_SDK + `firebase-${m}.js`))); }
+        catch { throw new ErroRede('Sem internet para abrir o banco.'); }
+        const app = a.initializeApp(FB_CONFIG);
+        let db;
+        try { db = fs.initializeFirestore(app, { localCache: fs.persistentLocalCache({ tabManager: fs.persistentMultipleTabManager() }) }); }
+        catch { db = fs.getFirestore(app); }
+        const auth = au.getAuth(app);
+        await new Promise((res) => { const u = au.onAuthStateChanged(auth, () => { u(); res(); }); });
+        if (!auth.currentUser) {
+          try { await au.signInAnonymously(auth); } catch (e) { throw (e.code === 'auth/network-request-failed' ? new ErroRede('Sem internet.') : e); }
+        }
+        Nuvem.db = db;
+        Nuvem.fb = { fs, au, auth };
+        return Nuvem.fb;
+      })().catch((e) => { Nuvem._carregando = null; throw e; });
+    }
+    return Nuvem._carregando;
+  },
+
+  parar() {
+    Nuvem.un.forEach((u) => { try { u(); } catch { /* já parado */ } });
+    Nuvem.un = []; Nuvem.ev = ''; Nuvem.pronto = null; Nuvem.estado = null;
+  },
+
+  evRef(ev = cfg.ev) { return Nuvem.fb.fs.doc(Nuvem.db, 'eventos', ev); },
+
+  // Escuta o evento ao vivo: qualquer mudança (de qualquer celular) atualiza a tela.
+  async ouvir(ev) {
+    await Nuvem.iniciar();
+    if (Nuvem.ev === ev && Nuvem.pronto) return Nuvem.pronto;
+    Nuvem.parar();
+    Nuvem.ev = ev;
+    const { fs } = Nuvem.fb;
+    const E = Nuvem.estado = { ev: null, existe: null, pessoas: new Map(), quartos: new Map(), pend: {}, cache: {}, idsP: [], idsQ: [] };
+    let ok, falhou;
+    Nuvem.pronto = new Promise((r, j) => { ok = r; falhou = j; });
+    Nuvem.pronto.catch(() => { /* tratado em api() */ });
+    const prim = { ev: false, p: false, q: false };
+    const marcar = (k, s) => {
+      prim[k] = true;
+      E.pend[k] = s.metadata.hasPendingWrites;
+      E.cache[k] = s.metadata.fromCache;
+      if (prim.ev && prim.p && prim.q) { ok(); Nuvem.mudou(); }
+    };
+    const erro = (e) => {
+      const msg = e.code === 'permission-denied' ? 'Sem acesso a esse evento. Confira o código.' : 'Banco: ' + e.message;
+      falhou(new Error(msg));
+      if (Nuvem.estado === E) { st.erro = msg; renderizarSoft(); }
+    };
+    const opt = { includeMetadataChanges: true };
+    const ref = Nuvem.evRef(ev);
+    Nuvem.un.push(fs.onSnapshot(ref, opt, (s) => {
+      if (!s.exists() && s.metadata.fromCache) return; // ainda não sabe (sem internet): espera o servidor
+      E.ev = s.exists() ? s.data() : null;
+      E.existe = s.exists();
+      marcar('ev', s);
+    }, erro));
+    for (const [k, col] of [['p', 'pessoas'], ['q', 'quartos']]) {
+      Nuvem.un.push(fs.onSnapshot(fs.collection(ref, col), opt, (s) => {
+        const m = k === 'p' ? E.pessoas : E.quartos;
+        s.docChanges().forEach((c) => { if (c.type === 'removed') m.delete(c.doc.id); else m.set(c.doc.id, c.doc.data()); });
+        marcar(k, s);
+      }, erro));
+    }
+    return Nuvem.pronto;
+  },
+
+  pendente() { const E = Nuvem.estado; return !!E && Object.values(E.pend).some(Boolean); },
+
+  montar() {
+    const E = Nuvem.estado;
+    const d = E.ev || {};
+    const tab = (cab, m) => {
+      const docs = [...m.entries()].sort((a, b) => ((a[1].o ?? 0) - (b[1].o ?? 0)) || (a[0] < b[0] ? -1 : 1));
+      return { ids: docs.map((x) => x[0]), linhas: docs.map(([, x]) => cab.map((_, i) => String((x.v || {})['c' + i] ?? ''))) };
+    };
+    const cabP = d.cabPessoas || [], cabQ = d.cabQuartos || CAB_Q;
+    const P = tab(cabP, E.pessoas), Q = tab(cabQ, E.quartos);
+    E.idsP = P.ids; E.idsQ = Q.ids;
+    return {
+      planilha: d.nome || 'Evento', aba: 'Inscritos', abas: ['Inscritos', ABA_Q],
+      cabecalho: [...cabP], linhas: P.linhas,
+      outras: { [ABA_Q]: E.quartos.size ? { cabecalho: [...cabQ], linhas: Q.linhas } : null },
+    };
+  },
+
+  // Atualiza a tela quando o banco muda (com um pequeno atraso para juntar várias mudanças).
+  mudou() {
+    clearTimeout(Nuvem._t);
+    Nuvem._t = setTimeout(() => {
+      const E = Nuvem.estado;
+      if (!cfg.ev || !E || !E.ev) { atualizarStatus(); return; }
+      const r = Nuvem.montar();
+      usarBase({ cabecalho: r.cabecalho, linhas: r.linhas, abas: r.abas, planilha: r.planilha, aba: r.aba, quartos: r.outras[ABA_Q] });
+      if (st.q.existe) st.criandoQuartos = false; else garantirAbaQuartos();
+      st.carregadoEm = new Date();
+      st.erro = null;
+      salvarCache();
+      renderizarSoft();
+    }, 120);
+  },
+
+  // Mesma "API" do Apps Script e do modo demonstração: o resto do app não precisa saber onde está o banco.
+  async api(acao, p) {
+    try { await comTempo(Nuvem.ouvir(cfg.ev), 20000, 'Sem conexão com o banco.'); }
+    catch (e) { if (Nuvem.estado && Nuvem.ev === cfg.ev && !(e instanceof ErroRede)) Nuvem.parar(); throw e; }
+    const E = Nuvem.estado;
+    if (E.existe === false) throw new Error('Evento não encontrado. Confira o código.');
+    if (acao === 'ler') return { ok: true, ...Nuvem.montar() };
+
+    const { fs } = Nuvem.fb;
+    const ref = Nuvem.evRef();
+    const b = fs.writeBatch(Nuvem.db);
+    const ehQ = p.aba === ABA_Q || acao === 'garantirAba';
+    const nomeCab = ehQ ? 'cabQuartos' : 'cabPessoas';
+    const cab0 = (E.ev && E.ev[nomeCab]) || (ehQ ? CAB_Q : []);
+    const cab = [...cab0];
+    const idx = (col) => { let i = cab.indexOf(col); if (i < 0) { cab.push(col); i = cab.length - 1; } return i; };
+    const colRef = fs.collection(ref, ehQ ? 'quartos' : 'pessoas');
+    const mapa = ehQ ? E.quartos : E.pessoas;
+    const ids = ehQ ? E.idsQ : E.idsP;
+    const acharId = (it) => {
+      if (it.chaveValor) {
+        const id = idDoc(it.chaveValor);
+        if (mapa.has(id)) return id;
+        const k = cab.indexOf(it.chaveColuna);
+        if (k >= 0) for (const [i, d] of mapa) if (String((d.v || {})['c' + k] ?? '').trim() === it.chaveValor) return i;
+      }
+      return ids[(it.linha || 0) - 2] || null;
+    };
+    const valoresV = (valores) => { const f = {}; for (const [k, v] of Object.entries(valores || {})) f['v.c' + idx(k)] = String(v ?? ''); return f; };
+
+    if (acao === 'atualizar' || acao === 'atualizarVarios') {
+      const itens = acao === 'atualizar' ? [p] : p.itens.map((it) => ({ chaveColuna: p.chaveColuna, ...it }));
+      let n = 0;
+      for (const it of itens) {
+        const id = acharId(it);
+        if (!id) continue;
+        const f = valoresV(it.valores);
+        if (Object.keys(f).length) { b.update(fs.doc(colRef, id), f); n++; }
+      }
+      if (!n && acao === 'atualizar') throw new Error('Registro não encontrado.');
+    } else if (acao === 'inserir') {
+      const v = p.valores || {};
+      const chave = v[p.chaveColuna];
+      const id = chave ? idDoc(chave) : fs.doc(colRef).id;
+      if (mapa.has(id)) return { ok: true, jaExistia: true };
+      const vv = {};
+      for (const [k, x] of Object.entries(v)) vv['c' + idx(k)] = String(x ?? '');
+      b.set(fs.doc(colRef, id), { o: Date.now(), v: vv });
+    } else if (acao === 'garantirColunas') {
+      (p.colunas || []).forEach(idx);
+    } else if (acao === 'garantirAba') {
+      if (p.nome !== ABA_Q || E.quartos.size) return { ok: true };
+      cab.length = 0; cab.push(...p.cabecalho);
+      p.linhas.forEach((l, i) => b.set(fs.doc(colRef, idDoc(l[0])), { o: i, v: Object.fromEntries(l.map((x, j) => ['c' + j, String(x ?? '')])) }));
+    } else throw new Error('Ação desconhecida: ' + acao);
+
+    if (cab.length !== cab0.length || acao === 'garantirAba') b.update(ref, { [nomeCab]: cab });
+    // Não espera o servidor: o Firestore grava no aparelho na hora e envia sozinho quando houver internet.
+    b.commit().catch((e) => { toast('Não foi gravado no banco: ' + (e.code === 'permission-denied' ? 'sem permissão' : e.message), 'erro'); });
+    return { ok: true };
+  },
+
+  // Grava linhas em lotes (o Firestore aceita até 500 operações por lote).
+  async gravarEmLotes(ops) {
+    const { fs } = Nuvem.fb;
+    for (let i = 0; i < ops.length; i += 400) {
+      const b = fs.writeBatch(Nuvem.db);
+      ops.slice(i, i + 400).forEach(([ref, dados, merge]) => (merge ? b.set(ref, dados, { merge: true }) : b.set(ref, dados)));
+      await comTempo(b.commit(), 60000, 'A internet caiu no meio do envio. Tente de novo.');
+    }
+  },
+
+  async criarEvento(nome, t) {
+    if (!navigator.onLine) throw new Error('Precisa de internet para criar o evento.');
+    await Nuvem.iniciar();
+    const { fs } = Nuvem.fb;
+    const codigo = gerarCodigo();
+    const ref = Nuvem.evRef(codigo);
+    const cab = [...t.cab];
+    Object.values(SIS).forEach((c) => { if (!cab.includes(c)) cab.push(c); });
+    const qs = t.quartos && t.quartos.linhas.length ? t.quartos : { cab: CAB_Q, linhas: QUARTOS_PADRAO.map((l) => l.map(String)) };
+    await comTempo(fs.setDoc(ref, { nome, criadoEm: fs.serverTimestamp(), cabPessoas: cab, cabQuartos: [...qs.cab] }), 30000, 'Sem conexão com o banco.');
+    const ops = [];
+    const kc = t.cab.map(norm).findIndex((h) => h === 'codigo');
+    const usados = new Set();
+    t.linhas.forEach((l, i) => {
+      let id = kc >= 0 && l[kc] ? idDoc(l[kc]) : 'linha-' + (i + 1);
+      while (usados.has(id)) id += '~';
+      usados.add(id);
+      const v = {};
+      l.forEach((x, j) => { if (String(x ?? '') !== '') v['c' + cab.indexOf(t.cab[j])] = String(x); });
+      ops.push([fs.doc(fs.collection(ref, 'pessoas'), id), { o: i, v }]);
+    });
+    qs.linhas.forEach((l, i) => ops.push([fs.doc(fs.collection(ref, 'quartos'), idDoc(l[0])), { o: i, v: Object.fromEntries(l.map((x, j) => ['c' + j, String(x ?? '')])) }]));
+    await Nuvem.gravarEmLotes(ops);
+    return codigo;
+  },
+
+  // Planilha nova do site de ingressos → atualiza o evento sem perder o que a recepção fez.
+  async importar(t) {
+    if (!navigator.onLine) throw new Error('Precisa de internet para importar.');
+    await comTempo(Nuvem.ouvir(cfg.ev), 20000, 'Sem conexão com o banco.');
+    const { fs } = Nuvem.fb;
+    const E = Nuvem.estado;
+    const ref = Nuvem.evRef();
+    const cab0 = (E.ev && E.ev.cabPessoas) || [];
+    const cab = [...cab0];
+    t.cab.forEach((c) => { if (!cab.includes(c)) cab.push(c); });
+    if (cab.length !== cab0.length) await comTempo(fs.updateDoc(ref, { cabPessoas: cab }), 30000, 'Sem conexão com o banco.');
+    const ic = (re) => cab.map(norm).findIndex((h) => re.test(h));
+    const kCod = ic(/^codigo$/), kNome = ic(/nome completo|^nome$/), kUsado = ic(/^usado$/), kStatus = ic(/^status$/);
+    const chave = (get) => { const c = kCod >= 0 ? String(get(kCod) ?? '').trim() : ''; if (c) return 'c:' + c; const n = kNome >= 0 ? norm(get(kNome)) : ''; return n ? 'n:' + n : ''; };
+    const existentes = new Map();
+    let maxO = 0;
+    for (const [id, d] of E.pessoas) {
+      const v = d.v || {};
+      const k = chave((i) => v['c' + i]);
+      if (k) existentes.set(k, [id, v]);
+      maxO = Math.max(maxO, Number(d.o) || 0);
+    }
+    const sis = new Set(Object.values(SIS).map((c) => cab.indexOf(c)));
+    const fi = t.cab.map((c) => cab.indexOf(c));
+    const ops = [];
+    let novos = 0, atualizados = 0;
+    const usados = new Set(E.pessoas.keys());
+    t.linhas.forEach((l) => {
+      const k = chave((i) => { const j = fi.indexOf(i); return j >= 0 ? l[j] : ''; });
+      const ex = k && existentes.get(k);
+      if (ex) {
+        const [id, v] = ex;
+        const vv = {};
+        l.forEach((x, j) => {
+          const i = fi[j];
+          if (sis.has(i)) return; // colunas da recepção: nunca sobrescreve
+          const atual = String(v['c' + i] ?? '');
+          let novo = String(x ?? '');
+          if (i === kUsado && norm(atual) === 'usado') return;
+          if (i === kStatus && /^(pago|aprovado)/.test(norm(atual)) && !/^(pago|aprovado)/.test(norm(novo))) return;
+          if (novo !== atual) vv['c' + i] = novo;
+        });
+        if (Object.keys(vv).length) { ops.push([fs.doc(fs.collection(ref, 'pessoas'), id), { v: vv }, true]); atualizados++; }
+      } else {
+        const cod = kCod >= 0 ? l[fi.indexOf(kCod)] : '';
+        let id = cod ? idDoc(cod) : 'linha-' + Date.now().toString(36) + '-' + novos;
+        while (usados.has(id)) id += '~';
+        usados.add(id);
+        const v = {};
+        l.forEach((x, j) => { if (String(x ?? '') !== '') v['c' + fi[j]] = String(x); });
+        ops.push([fs.doc(fs.collection(ref, 'pessoas'), id), { o: maxO + 1 + novos, v }]);
+        if (k) existentes.set(k, [id, v]);
+        novos++;
+      }
+    });
+    await Nuvem.gravarEmLotes(ops);
+    return { novos, atualizados, total: t.linhas.length };
+  },
+
+  async sair() {
+    Nuvem.parar();
+    if (Nuvem.fb) {
+      try { await Nuvem.fb.fs.terminate(Nuvem.db); await Nuvem.fb.fs.clearIndexedDbPersistence(Nuvem.db); } catch { /* segue */ }
+    }
+  },
+};
+
+/* --- telas do evento --- */
+async function perguntarAparelho(titulo, texto, botao) {
+  const r = await folha({
+    titulo,
+    corpo: `${texto}<div class="form"><label class="campo">Seu nome / nome deste aparelho <span class="muted" style="font-weight:400">aparece na planilha em cada check-in</span>
+      <input name="atendente" value="${esc(cfg.atendente)}" placeholder="Ex.: Mesa 1 — Ana"></label></div>`,
+    botoes: [{ v: 'ok', t: botao, cls: 'primario' }],
+    ler: (f) => ({ atendente: f.atendente.value.trim() }),
+  });
+  return r && r.dados;
+}
+
+async function entrarEvento(texto, { perguntar = true } = {}) {
+  const codigo = normCodigo(texto);
+  if (!codigo) {
+    const s = String(texto || '');
+    if (/#conectar=/.test(s)) { conectarComLink(s); return; }
+    if (/docs\.google\.com\/spreadsheets|drive\.google\.com/i.test(s)) { st.guia = { tipo: 'planilha', url: s.match(/https?:\/\/\S+/)?.[0] || '' }; irPara('ajustes'); renderAjustes(); return; }
+    toast(s.trim() ? 'Código inválido. Ele tem 16 letras/números, como ABCD-EFGH-JKLM-NPQR.' : 'Digite o código do evento.', 'erro');
+    return;
+  }
+  if (location.hash.startsWith('#evento=')) history.replaceState(null, '', location.pathname + '#recepcao');
+  if (perguntar) {
+    const r = await perguntarAparelho('Entrar no evento', `<p>Entrar no evento <b>${esc(codigo)}</b> neste aparelho?</p>`, 'Entrar');
+    if (!r) { renderizar(); return; }
+    cfg.atendente = r.atendente;
+  }
+  Object.assign(cfg, { ev: codigo, demo: false, local: false, url: '', chave: '', planilha: '', aba: '', mapa: {} });
+  salvarCfg();
+  st.base = null; st.fila = []; salvarFila(); st.guia = null; st.erro = null; localStorage.removeItem(K.cache);
+  await recarregar();
+  if (st.base) { comemorar('Você entrou no evento!'); irPara('recepcao'); }
+  else if (!st.offline) { Nuvem.parar(); cfg.ev = ''; salvarCfg(); renderizar(); }
+}
+
+async function criarEventoComArquivo(file) {
+  let t;
+  try { t = await Arq.ler(file); } catch (e) { toast(e.message || 'Não consegui ler esse arquivo.', 'erro'); return; }
+  const m = mapear(t.cab);
+  if (m.nome < 0 && m.comprador < 0 && m.codigo < 0) { toast('Não achei as colunas de nome ou código nesse arquivo. É a planilha de inscritos?', 'erro'); return; }
+  const r = await folha({
+    titulo: 'Criar evento',
+    corpo: `<p>A planilha <b>${esc(file.name)}</b> tem <b>${t.linhas.length}</b> inscritos. Eles vão para o banco e a equipe entra com o código do evento.</p>
+      <div class="form">
+        <label class="campo">Nome do evento<input name="nome" value="${esc(cfg.evento || 'Encontro com Deus')}"></label>
+        <label class="campo">Seu nome / nome deste aparelho<input name="atendente" value="${esc(cfg.atendente)}" placeholder="Ex.: Coordenação — Victor"></label>
+      </div>`,
+    botoes: [{ v: 'ok', t: 'Criar evento', cls: 'primario' }],
+    ler: (f) => ({ nome: f.nome.value.trim() || 'Encontro com Deus', atendente: f.atendente.value.trim() }),
+  });
+  if (!r) return;
+  toast('Enviando a planilha para o banco…');
+  girar(true);
+  let codigo;
+  try { codigo = await Nuvem.criarEvento(r.dados.nome, t); }
+  catch (e) { toast('Não deu para criar o evento: ' + e.message, 'erro'); return; }
+  finally { girar(false); }
+  Object.assign(cfg, { ev: codigo, evento: r.dados.nome, atendente: r.dados.atendente, demo: false, local: false, url: '', chave: '', planilha: '', aba: '', mapa: {} });
+  salvarCfg();
+  st.base = null; st.fila = []; salvarFila(); st.guia = null; localStorage.removeItem(K.cache);
+  await recarregar();
+  comemorar('Evento criado!');
+  irPara('ajustes');
+  setTimeout(() => mostrarCodigo(true), 900);
+}
+
+async function importarNoEvento(file) {
+  let t;
+  try { t = await Arq.ler(file); } catch (e) { toast(e.message || 'Não consegui ler esse arquivo.', 'erro'); return; }
+  if (!await confirmar('Atualizar inscritos',
+    `<p>O arquivo <b>${esc(file.name)}</b> tem <b>${t.linhas.length}</b> registros.</p>
+     <p>Quem é novo entra no evento; quem já existe tem os dados do site atualizados. <b>Check-ins, pagamentos na recepção, quartos e cadastros feitos na recepção não são alterados.</b></p>`,
+    'Atualizar', 'primario')) return;
+  girar(true);
+  try {
+    const r = await Nuvem.importar(t);
+    toast(`${r.novos} novo(s) · ${r.atualizados} atualizado(s) · ${r.total - r.novos - r.atualizados} sem mudança.`, 'ok');
+  } catch (e) { toast('Não deu para importar: ' + e.message, 'erro'); }
+  finally { girar(false); }
+}
+
+const linkEvento = () => SITE + '#evento=' + cfg.ev;
+
+async function mostrarCodigo(novo = false) {
+  const r = await folha({
+    titulo: novo ? 'Evento criado! Envie para a equipe' : 'Acesso da equipe',
+    corpo: `<p>Quem tiver este código entra no evento pelo site e trabalha junto, ao vivo:</p>
+      <div class="codigo-evento"><b>${esc(cfg.ev)}</b></div>
+      <p class="muted peq">Site: ${esc(SITE)}<br>O código dá acesso aos dados dos inscritos (telefones e saúde). Envie só para a equipe.</p>`,
+    botoes: [{ v: 'copiar', t: 'Copiar código' }, { v: 'enviar', t: 'Enviar link', cls: 'primario' }],
+  });
+  const texto = `Recepção do ${cfg.evento || st.planilha || 'Encontro com Deus'}: abra no celular ${linkEvento()} (código do evento: ${cfg.ev})`;
+  if (r === 'enviar') {
+    if (navigator.share) { try { await navigator.share({ title: 'Acesso à recepção', text: texto }); } catch { /* cancelado */ } }
+    else { try { await navigator.clipboard.writeText(texto); toast('Mensagem copiada. Cole no WhatsApp da equipe.', 'ok'); } catch { prompt('Copie:', texto); } }
+  } else if (r === 'copiar') {
+    try { await navigator.clipboard.writeText(cfg.ev); toast('Código copiado.', 'ok'); } catch { prompt('Copie o código:', cfg.ev); }
+  }
+}
+
+function cartaoEvento() {
+  const pend = Nuvem.pendente();
+  return `<div class="cartao">
+    <div class="estado">
+      <div class="bola ${st.erro ? 'erro' : ''}"><svg viewBox="0 0 24 24">${st.erro ? '<path d="M12 8v5M12 16.5v.5"/><circle cx="12" cy="12" r="9"/>' : '<path d="M5 12.5l4.5 4.5L19 7.5"/>'}</svg></div>
+      <div style="min-width:0"><b>${esc(st.planilha || cfg.evento || 'Evento')}</b>
+        <div class="muted peq">${st.erro ? esc(st.erro) : st.base ? `${st.pessoas.length} inscritos · ${!navigator.onLine ? 'sem internet, guardando no aparelho' : pend ? 'enviando…' : 'ao vivo com a equipe'}` : 'Carregando…'}</div></div>
+    </div>
+    <button class="codigo-evento" data-acao="mostrarCodigo" title="Mostrar código">Código do evento <b>${esc(cfg.ev)}</b></button>
+    <div class="form" style="margin-top:12px">
+      <button class="btn primario bloco" data-acao="mostrarCodigo">Enviar acesso para a equipe</button>
+      <button class="btn bloco" data-acao="importarEvento">📂 Atualizar inscritos com planilha nova</button>
+      <button class="btn bloco" data-acao="baixarPlanilha">⬇ Baixar planilha (.xlsx)</button>
+    </div>
+  </div>`;
 }
 
 /* ================= modo demonstração ================= */
@@ -1953,12 +2414,13 @@ const Demo = {
   if (location.hash === '#naopagos') st.filtro = 'naopagos';
   // Abre na hora com os dados guardados no aparelho; depois atualiza pela internet.
   const cache = ler(K.cache, null);
-  if (configurado() && !semNuvem() && cache && cache.url === cfg.url && cache.cabecalho) {
+  if (configurado() && !semNuvem() && cache && cache.url === (cfg.ev || cfg.url) && cache.cabecalho) {
     usarBase(cache);
     st.carregadoEm = cache.em ? new Date(cache.em) : null;
   }
   renderizar();
   if (location.hash.startsWith('#conectar=')) { conectarComLink(location.hash); return; }
+  if (location.hash.startsWith('#evento=')) { entrarEvento(location.hash); return; }
   if (configurado()) recarregar({ silencioso: !!st.base });
   console.info('Encontro com Deus v' + VERSAO);
 })();

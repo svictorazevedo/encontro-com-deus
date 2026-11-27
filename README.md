@@ -1,9 +1,34 @@
 # Encontro com Deus — Painel e Recepção
 
-App web (roda no **GitHub Pages**, instalável no celular) cujo banco de dados é uma **planilha Google** no Drive.
-Um Apps Script instalado na própria planilha ([apps-script/Codigo.gs](apps-script/Codigo.gs)) faz a ponte.
+App web (roda no **GitHub Pages**, instalável no celular) com banco de dados no **Firebase (Firestore)**:
+todos os celulares da recepção trabalham juntos, **ao vivo**, e continuam funcionando sem internet.
 
 **Endereço:** https://svictorazevedo.github.io/encontro-com-deus/
+
+## Como usar
+
+1. **Responsável:** em Ajustes → **Criar evento com a planilha**, escolha o `.xlsx` ou `.csv` exportado do site de ingressos.
+   Os inscritos vão para o banco e o app mostra o **código do evento** (ex.: `ABCD-EFGH-JKLM-NPQR`).
+2. **Enviar acesso para a equipe**: manda o link com o código (WhatsApp etc.). Quem abrir o link, ou digitar o código, entra.
+3. Todos fazem check-in, recebem pagamentos, cadastram e alocam quartos; tudo aparece na hora nos outros celulares.
+4. **Atualizar inscritos com planilha nova**: importe de novo o arquivo do site. Entram os novos e os dados do site são
+   atualizados; check-ins, pagamentos na recepção, quartos e cadastros da recepção **não são alterados**.
+5. **Baixar planilha (.xlsx)**: a qualquer momento, com tudo o que foi feito (aba de inscritos + aba Quartos).
+
+Sem internet, as ações ficam guardadas no aparelho e são enviadas sozinhas quando a conexão volta.
+
+## Banco (Firebase)
+
+- Projeto `encontro-com-deus-7dd79` (plano gratuito Spark), Firestore em `southamerica-east1` (São Paulo),
+  login **anônimo** (com limpeza automática de contas com mais de 30 dias).
+- Estrutura: `eventos/{CÓDIGO}` (nome, `cabPessoas`, `cabQuartos`) com as subcoleções `pessoas` e `quartos`;
+  cada linha é `{ o: ordem, v: { c0, c1, … } }`, onde `cN` é a coluna `N` de `cabPessoas`/`cabQuartos`.
+- Regras em [firestore.rules](firestore.rules) (publicadas no console): só entra quem sabe o código; não dá para listar eventos.
+- O código tem 16 caracteres aleatórios (cerca de 80 bits): ele **é** a senha do evento. Quem tem o código vê telefones e
+  dados de saúde. Envie só para a equipe.
+
+Outras opções (em Ajustes → Outras opções): abrir a planilha só no aparelho, sem banco; e o antigo **modo Google**
+(planilha + Apps Script, [apps-script/Codigo.gs](apps-script/Codigo.gs)).
 
 ## Telas
 
@@ -36,9 +61,9 @@ Um Apps Script instalado na própria planilha ([apps-script/Codigo.gs](apps-scri
 - Atualiza sozinho a cada 30 s, para ver o trabalho das outras mesas e as novas compras no app.
 - No PC vira layout de site, com navegação no topo e a lista em grade.
 
-## Jeito mais simples: abrir o arquivo
+## Só neste aparelho (sem banco)
 
-Em **Ajustes → Abrir planilha**, escolha o `.xlsx` ou `.csv` exportado do site de ingressos. Pronto: sem Google, sem script.
+Em **Ajustes → Outras opções → Abrir planilha só neste aparelho**, escolha o `.xlsx` ou `.csv` exportado do site de ingressos. Pronto: sem Google, sem script.
 
 - Tudo o que é feito (check-in, pagamento, quarto, cadastro) fica salvo **naquele aparelho**, mesmo sem internet.
 - **Baixar planilha atualizada (.xlsx)**: gera a planilha com tudo o que foi feito (aba de inscritos + aba Quartos). No celular abre o compartilhar (WhatsApp, Drive…).
@@ -46,9 +71,8 @@ Em **Ajustes → Abrir planilha**, escolha o `.xlsx` ou `.csv` exportado do site
   inscrições novas do site ou para juntar a planilha baixada de outro celular.
 - Se colarem o link de uma Planilha Google, o app explica como baixá-la como .xlsx.
 
-Para vários celulares vendo a **mesma** planilha ao vivo, use o modo Google abaixo.
 
-## Modo Google (vários celulares sincronizados)
+## Modo Google (antigo: planilha + Apps Script)
 
 1. Planilha: envie o `.xlsx` exportado ao Google Drive e abra como Planilhas Google.
 2. Na planilha, abra **Extensões → Apps Script**, cole `apps-script/Codigo.gs` e salve.
@@ -90,6 +114,8 @@ Pode ser editada direto na planilha. Sexo vazio = misto. O quarto de cada pessoa
 
 ## Versões
 
+- **3.0.0**: banco no Firebase (ao vivo entre celulares, offline): criar evento com a planilha, entrar com código,
+  atualizar inscritos sem perder o que a recepção fez, baixar .xlsx.
 - **2.2.0**: abrir a planilha direto do arquivo (.xlsx/.csv), sem Google; baixar planilha atualizada (.xlsx); juntar arquivo novo ou de outro celular.
 - **2.1.1**: colar o link da planilha (ou do script) em "Conectar" mostra o passo a passo de instalação em vez de "link inválido".
 - **2.1.0**: alocação de quartos (tela Quartos, distribuição automática, quarto no check-in, na ficha, no cadastro
