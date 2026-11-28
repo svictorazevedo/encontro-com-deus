@@ -41,13 +41,14 @@ Outras opções (em Ajustes → Outras opções): abrir a planilha só no aparel
   (com o total recebido), batizados e não batizados, quantidade por líder de célula e por discipulado.
   Variações do mesmo nome são agrupadas: acentos, maiúsculas, "Pr.", "Obr." etc.
   Cada número leva à lista correspondente.
-- **Quartos**: mapa do local por andar e ala (24 quartos + colchões avulsos + cozinha = 336 vagas), com
+- **Quartos**: mapa do local por andar e ala (Capela de Cima e Capela de Baixo: 24 quartos + colchões masculinos e femininos + cozinha = 336 vagas), com
   ocupação de cada quarto e vagas por sexo. Tocar num quarto mostra quem está nele e permite adicionar
   (com busca e seleção múltipla), tirar pessoas e editar camas, sexo e observação.
   **Distribuir automaticamente** coloca quem está sem quarto nas vagas livres:
-  - respeita o sexo do quarto;
+  - escolhe a capela (Cima, Baixo ou as duas) e se usa só camas ou camas e colchões;
+  - homens só em quartos/colchões masculinos e mulheres só nos femininos;
   - mantém o discipulado ou a célula juntos (configurável), com opção de separar equipe de encontristas;
-  - usa os quartos mistos e os colchões avulsos só depois; deixa a Cozinha de fora;
+  - usa os quartos mistos vazios depois e os colchões só por último (se escolhido); deixa a Cozinha de fora;
   - mostra uma prévia antes e oferece "Desfazer".
   Na recepção, o check-in já mostra o quarto ("Bem-vinda, Ana! · Quarto 03") e a ficha tem "Escolher/Trocar quarto".
 - **Ajustes**: conectar o aparelho (link de conexão), nome do aparelho/atendente, enviar o acesso para outro
@@ -114,6 +115,8 @@ Pode ser editada direto na planilha. Sexo vazio = misto. O quarto de cada pessoa
 
 ## Versões
 
+- **3.2.0**: distribuição automática por **capela** (Capela de Cima, Capela de Baixo ou as duas) e com opção **só camas** ou **camas e colchões**;
+  homens só em quartos/colchões masculinos e mulheres só nos femininos (colchões passam a ser separados por sexo, com o botão "Dividir colchões por sexo").
 - **3.1.3**: importação casa pelo código do ingresso **ou** pelo nome (planilha sem código não duplica quem veio do site); reconhece coluna "Pagamento".
 - **3.1.2**: reconhece a exportação de ingressos com "Ingresso" (código), "Situação", "Contato (celular)" e "Qual igreja".
 - **3.1.1**: reconhece planilhas de outros sites (Participante, Lote, Forma de pagamento, Situação, batizado 1/0, Observação);

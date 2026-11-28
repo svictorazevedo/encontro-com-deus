@@ -1,8 +1,8 @@
 /* Service worker: deixa o app abrir sem internet (a "casca" do app).
  * Os dados da planilha NÃO passam por aqui — vão direto ao Apps Script. */
-const CACHE = 'encontro-v3.1.3';
+const CACHE = 'encontro-v3.2.0';
 const CASCA = [
-  './', './index.html', './style.css?v=3.1.3', './app.js?v=3.1.3', './manifest.webmanifest',
+  './', './index.html', './style.css?v=3.2.0', './app.js?v=3.2.0', './manifest.webmanifest',
   './icones/icone-192.png', './icones/icone-512.png', './icones/apple-touch-icon.png',
 ];
 

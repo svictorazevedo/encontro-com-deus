@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const VERSAO = '3.1.3';
+const VERSAO = '3.2.0';
 const K = { cfg: 'encontro.cfg.v1', demo: 'encontro.demo.v1', fila: 'encontro.fila.v1', cache: 'encontro.cache.v1', local: 'encontro.local.v1' };
 const SITE = location.origin + location.pathname;
 
@@ -102,7 +102,8 @@ const QUARTOS_PADRAO = [
   ...[[10, 14], [11, 14], [12, 14]].map(([n, c]) => [`Quarto ${n}`, 'Cima', 'Corredores do fundo', c, 'Masculino', `${c / 2} beliches`]),
   ...[[13, 8], [14, 8], [15, 10], [16, 8], [17, 10], [18, 13]].map(([n, c]) => [`Quarto ${n}`, 'Baixo', 'Lado direito', c, 'Masculino', n === 18 ? '6 beliches + 1 cama' : `${c / 2} beliches`]),
   ...[[19, 8], [20, 10], [21, 8], [22, 10], [23, 10], [24, 12]].map(([n, c]) => [`Quarto ${n}`, 'Baixo', 'Lado esquerdo', c, 'Feminino', `${c / 2} beliches`]),
-  ['Colchões avulsos', 'Extras', 'Colchões', 49, '', 'Colchões avulsos'],
+  ['Colchões masculinos', 'Extras', 'Colchões', 25, 'Masculino', 'Colchões avulsos'],
+  ['Colchões femininos', 'Extras', 'Colchões', 24, 'Feminino', 'Colchões avulsos'],
   ['Cozinha', 'Extras', 'Cozinha', 6, '', 'Equipe da cozinha (fora da distribuição automática)'],
 ];
 const CATS = { encontrista: 'Encontrista', equipe: 'Equipe', anjo: 'Anjo', outro: 'Outro' };
@@ -686,6 +687,10 @@ function ocupacao() {
 const ocupantesDe = (q, oc = ocupacao()) => (oc.get(norm(q.nome)) || []).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 const acharQuarto = (nome) => listaQuartos().find((q) => norm(q.nome) === norm(nome));
 const corSexo = (sx) => (sx === 'f' ? '#d6457a' : sx === 'm' ? 'var(--azul)' : 'var(--muted)');
+const ehColchao = (q) => /colch|avuls/.test(norm(q.nome));
+/* Capela = o "Andar" do quarto (Cima / Baixo). Colchões e Cozinha (Extras) não pertencem a uma capela. */
+const nomeCapela = (andar) => (/capela/i.test(andar) ? andar : 'Capela de ' + andar);
+const listaCapelas = () => [...new Set(listaQuartos().filter((q) => !q.cozinha && !ehColchao(q) && q.andar).map((q) => q.andar))];
 
 function renderQuartos() {
   const el = $('#tela-quartos');
@@ -731,12 +736,15 @@ function renderQuartos() {
         <button class="btn primario" data-acao="distribuir">Distribuir automaticamente</button>
         ${sem.length ? `<button class="btn suave" data-ir-filtro="semquarto">Ver sem quarto (${sem.length})</button>` : ''}
       </div>
+      ${qs.some((q) => ehColchao(q) && !q.sx) ? `<div class="aviso" style="margin-top:12px">Há colchões sem sexo definido: a distribuição automática não usa esses colchões.
+        <div style="margin-top:8px"><button class="btn" data-acao="dividirColchoes">Dividir colchões por sexo</button></div></div>` : ''}
     </div>
     ${grupos.map((g) => {
       const camas = g.qs.reduce((s, q) => s + q.camas, 0);
       const ocup = g.qs.reduce((s, q) => s + ocupantesDe(q, oc).length, 0);
       const sxs = [...new Set(g.qs.map((q) => q.sx))];
-      return `<div class="secao">${esc(g.andar)}${g.ala ? ' · ' + esc(g.ala) : ''}
+      const ehCapela = listaCapelas().includes(g.andar);
+      return `<div class="secao">${esc(ehCapela ? nomeCapela(g.andar) : g.andar)}${g.ala ? ' · ' + esc(g.ala) : ''}
           <span class="secao-dir">${sxs.length === 1 ? `<span style="color:${corSexo(sxs[0])}">${SEXO_TXT[sxs[0]]}</span> · ` : ''}${ocup}/${camas}</span></div>
         <div class="quartos-grade">${g.qs.map((q) => {
           const n = ocupantesDe(q, oc).length;
@@ -892,13 +900,22 @@ async function escolherQuarto(p) {
   toast(`${p.nome} no ${q.nome}`, 'ok', { rotulo: 'Desfazer', fn: () => atualizar(acharPessoaPorCodigo(p) || p, { [SIS.quarto]: antes || '' }) });
 }
 
-function planejarDistribuicao({ quem, juntos, separar }) {
+function planejarDistribuicao({ quem, juntos, separar, capela, colchoes }) {
   const oc = ocupacao();
-  const quartos = listaQuartos().filter((q) => !q.cozinha).map((q) => {
+  const semSexoQ = [], mistosOcupados = [];
+  const quartos = [];
+  for (const q of listaQuartos()) {
+    if (q.cozinha) continue;
+    const colchao = ehColchao(q);
+    if (colchao ? colchoes !== 'sim' : capela !== 'todas' && q.andar !== capela) continue;
     const ocs = ocupantesDe(q, oc);
     const sxOc = [...new Set(ocs.map((p) => p.sx).filter(Boolean))];
-    return { q, livre: q.camas - ocs.length, sx: q.sx || (sxOc.length === 1 ? sxOc[0] : '') };
-  });
+    let sx = q.sx;
+    if (!sx && sxOc.length > 1) { mistosOcupados.push(q.nome); continue; } // já tem homens e mulheres: não mexe
+    if (!sx && colchao) { if (q.camas - ocs.length > 0) semSexoQ.push(q.nome); continue; } // colchões precisam ter sexo
+    if (!sx) sx = sxOc[0] || '';
+    quartos.push({ q, colchao, livre: q.camas - ocs.length, sx });
+  }
   const cands = st.pessoas.filter((p) => !p.cancelado && !p.quarto && (quem === 'todos' || p.checkin));
   const semSexo = cands.filter((p) => !p.sx);
   const plano = [], semVaga = [];
@@ -916,46 +933,52 @@ function planejarDistribuicao({ quem, juntos, separar }) {
     for (const g of grupos) {
       const resto = [...g].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
       while (resto.length) {
-        // 1º quartos do mesmo sexo (o grupo inteiro cabe? senão divide pelo quarto com mais vagas);
-        // 2º quartos mistos; colchões avulsos só por último.
+        // 1º camas dos quartos deste sexo (o grupo inteiro cabe? senão divide pelo quarto com mais vagas);
+        // 2º quartos mistos vazios (passam a ser deste sexo); 3º colchões deste sexo, se escolhido.
+        // Nunca coloca alguém em quarto ou colchão do outro sexo.
         const maior = (l) => [...l].sort((a, b) => b.livre - a.livre)[0];
-        const mesmo = quartos.filter((x) => x.sx === sexo && x.livre > 0);
-        const avulso = (x) => /colch|avuls/.test(norm(x.q.nome));
-        const mistos = quartos.filter((x) => !x.sx && x.livre > 0 && !avulso(x));
-        const avulsos = quartos.filter((x) => !x.sx && x.livre > 0 && avulso(x));
+        const livres = quartos.filter((x) => x.livre > 0);
+        const mesmo = livres.filter((x) => !x.colchao && x.sx === sexo);
+        const mistos = livres.filter((x) => !x.colchao && !x.sx);
+        const colch = livres.filter((x) => x.colchao && x.sx === sexo);
         const r = mesmo.find((x) => x.livre >= resto.length) || maior(mesmo)
-          || mistos.find((x) => x.livre >= resto.length) || maior(mistos) || avulsos[0];
+          || mistos.find((x) => x.livre >= resto.length) || maior(mistos) || maior(colch);
         if (!r) { semVaga.push(...resto); break; }
         const lote = resto.splice(0, Math.min(r.livre, resto.length));
         lote.forEach((p) => plano.push([p, r.q.nome]));
         r.livre -= lote.length;
-        if (!r.sx && !avulso(r)) r.sx = sexo; // quarto misto passa a ser deste sexo; colchões avulsos servem aos dois
+        if (!r.sx) r.sx = sexo; // quarto misto passa a ser deste sexo
       }
     }
   }
-  return { plano, semVaga, semSexo, total: cands.length };
+  return { plano, semVaga, semSexo, semSexoQ, mistosOcupados, total: cands.length };
 }
 
 async function distribuir() {
   const r = await folha({
     titulo: 'Distribuir automaticamente',
     corpo: `<div class="form">
-      <p class="muted" style="margin:0">Coloca quem está <b>sem quarto</b> nas vagas livres, respeitando o sexo de cada quarto. Quem já tem quarto não muda. A Cozinha fica de fora.</p>
+      <p class="muted" style="margin:0">Coloca quem está <b>sem quarto</b> nas vagas livres. Homens só em quartos e colchões masculinos, mulheres só nos femininos; quarto misto vazio passa a ser do sexo de quem entrar. Quem já tem quarto não muda. A Cozinha fica de fora.</p>
+      <div><div class="rotulo-grupo">Capela</div>${radios('capela', [...listaCapelas().map((a) => [a, nomeCapela(a)]), ['todas', 'As duas']], listaCapelas()[0] || 'todas')}</div>
+      <div><div class="rotulo-grupo">Onde colocar</div>${radios('colchoes', [['nao', 'Só camas'], ['sim', 'Camas e colchões']], 'nao')}
+        <div class="muted peq" style="margin-top:4px">Com colchões, eles só são usados depois que as camas acabarem.</div></div>
       <div><div class="rotulo-grupo">Quem distribuir</div>${radios('quem', [['todos', 'Todos os inscritos'], ['presentes', 'Só quem fez check-in']], 'todos')}</div>
       <div><div class="rotulo-grupo">Manter juntos no mesmo quarto</div>${radios('juntos', [['discipulador', 'Discipulado'], ['lider', 'Célula (líder)'], ['nenhum', 'Tanto faz']], 'discipulador')}</div>
       <label class="interruptor">Separar equipe de encontristas <input type="checkbox" name="separar"></label>
     </div>`,
     botoes: [{ v: 'ok', t: 'Ver prévia', cls: 'primario' }],
-    ler: (f) => ({ quem: f.quem.value, juntos: f.juntos.value, separar: f.separar.checked }),
+    ler: (f) => ({ quem: f.quem.value, juntos: f.juntos.value, separar: f.separar.checked, capela: f.capela.value, colchoes: f.colchoes.value }),
   });
   if (!r || r.v !== 'ok') return;
-  const { plano, semVaga, semSexo, total } = planejarDistribuicao(r.dados);
+  const { plano, semVaga, semSexo, semSexoQ, mistosOcupados, total } = planejarDistribuicao(r.dados);
+  const ondeTxt = `${r.dados.capela === 'todas' ? 'As duas capelas' : nomeCapela(r.dados.capela)} · ${r.dados.colchoes === 'sim' ? 'camas e colchões' : 'só camas'}`;
   if (!total) { toast('Ninguém sem quarto para distribuir.'); return; }
   const porQuarto = new Map();
   for (const [p, nome] of plano) { if (!porQuarto.has(nome)) porQuarto.set(nome, []); porQuarto.get(nome).push(p); }
   const c = await folha({
     titulo: 'Prévia da distribuição',
     corpo: `
+      <div class="muted peq" style="margin-bottom:8px">${esc(ondeTxt)}</div>
       <div class="kpis" style="margin-bottom:12px">
         ${kpi('Serão alocados', plano.length, `em ${porQuarto.size} quarto(s)`, 'ok')}
         ${kpi('Ficam sem quarto', semVaga.length + semSexo.length, semSexo.length ? `${semSexo.length} sem sexo informado` : semVaga.length ? 'faltou vaga' : '—', semVaga.length + semSexo.length ? 'erro' : '')}
@@ -963,7 +986,9 @@ async function distribuir() {
       <div class="dados">${[...porQuarto.entries()].map(([nome, ps]) => `<div style="display:block"><b style="color:var(--txt)">${esc(nome)} <span class="muted">+${ps.length}</span></b>
         <div class="muted peq">${ps.map((p) => esc(p.nome)).join(', ')}</div></div>`).join('') || '<div>Nenhuma vaga compatível.</div>'}</div>
       ${semSexo.length ? `<div class="aviso">Sem sexo informado (aloque pela ficha): ${semSexo.map((p) => esc(p.nome)).join(', ')}</div>` : ''}
-      ${semVaga.length ? `<div class="aviso erro">Sem vaga: ${semVaga.map((p) => esc(p.nome)).join(', ')}</div>` : ''}`,
+      ${semVaga.length ? `<div class="aviso erro">Sem vaga: ${semVaga.map((p) => esc(p.nome)).join(', ')}</div>` : ''}
+      ${semSexoQ.length ? `<div class="aviso">Não usados por não ter sexo definido: ${esc(semSexoQ.join(', '))}. Use "Dividir colchões por sexo" na tela Quartos.</div>` : ''}
+      ${mistosOcupados.length ? `<div class="aviso">Não usados por já terem homens e mulheres: ${esc(mistosOcupados.join(', '))}.</div>` : ''}`,
     botoes: plano.length ? [{ v: 'ok', t: `Confirmar ${plano.length} alocações`, cls: 'primario' }] : [],
   });
   if (c !== 'ok') return;
@@ -973,6 +998,31 @@ async function distribuir() {
     rotulo: 'Desfazer',
     fn: () => alocarVarios(plano.map(([p]) => [acharPessoaPorCodigo(p) || p, ''])),
   });
+}
+
+async function dividirColchoes() {
+  const q = listaQuartos().find((x) => ehColchao(x) && !x.sx);
+  if (!q) return;
+  const ocs = ocupantesDe(q);
+  if (ocs.length) { toast(`Tire as ${ocs.length} pessoa(s) do ${q.nome} antes de dividir.`, 'erro'); abrirQuarto(q.nome); return; }
+  const r = await folha({
+    titulo: 'Dividir colchões por sexo',
+    corpo: `<div class="form">
+      <p class="muted" style="margin:0">O ${esc(q.nome)} tem ${q.camas} colchões. Eles viram dois grupos: um masculino e um feminino.</p>
+      <div class="duas-col"><label class="campo">Colchões masculinos<input name="m" inputmode="numeric" value="${Math.ceil(q.camas / 2)}"></label>
+        <label class="campo">Colchões femininos<input name="f" inputmode="numeric" value="${Math.floor(q.camas / 2)}"></label></div></div>`,
+    botoes: [{ v: 'ok', t: 'Dividir', cls: 'primario' }],
+    ler: (f) => ({ m: Math.max(0, Math.round(numero(f.m.value))), f: Math.max(0, Math.round(numero(f.f.value))) }),
+    validar: (d) => (d.m + d.f <= 0 ? 'Informe a quantidade.' : acharQuarto('Colchões femininos') || acharQuarto('Colchões masculinos') ? 'Já existe um grupo "Colchões masculinos" ou "Colchões femininos".' : ''),
+  });
+  if (!r) return;
+  const { m, f } = r.dados;
+  enfileirar('atualizar', { aba: ABA_Q, linha: q.linha, chaveColuna: colQ('quarto'), chaveValor: q.nome,
+    valores: { [colQ('quarto')]: 'Colchões masculinos', [colQ('camas')]: String(m), [colQ('sexo')]: 'Masculino' } });
+  enfileirar('inserir', { aba: ABA_Q, chaveColuna: colQ('quarto'), valores: {
+    [colQ('quarto')]: 'Colchões femininos', [colQ('andar')]: q.andar, [colQ('ala')]: q.ala, [colQ('camas')]: String(f), [colQ('sexo')]: 'Feminino', [colQ('obs')]: q.obs,
+  } });
+  toast(`Colchões divididos: ${m} masculinos e ${f} femininos.`, 'ok');
 }
 
 async function novoQuarto() {
@@ -1623,6 +1673,7 @@ document.addEventListener('click', async (e) => {
     case 'resetarDemo': localStorage.removeItem(K.demo); await recarregar(); toast('Dados fictícios recriados.', 'ok'); break;
     case 'desconectar': desconectar(); break;
     case 'distribuir': distribuir(); break;
+    case 'dividirColchoes': dividirColchoes(); break;
     case 'novoQuarto': novoQuarto(); break;
     case 'limparQuartos': limparQuartos(); break;
   }
