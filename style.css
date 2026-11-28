@@ -375,3 +375,20 @@ dialog.folha::backdrop { background: rgba(12, 10, 25, .45); }
 .obs-topo b { color: var(--muted); font-weight: 600; font-size: .9rem; }
 .obs-txt { margin-top: 6px; white-space: pre-line; overflow-wrap: anywhere; font-size: .95rem; }
 textarea { resize: vertical; min-height: 64px; font: inherit; }
+
+/* Espelho dos quartos (impressão / PDF) */
+#espelho { display: none; }
+@media print {
+  @page { size: A4; margin: 14mm; }
+  body.imprimindo > *:not(#espelho) { display: none !important; }
+  body.imprimindo { background: #fff !important; }
+  body.imprimindo #espelho { display: block; color: #000; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  .esp-pag { page-break-after: always; break-after: page; }
+  .esp-pag:last-child { page-break-after: auto; break-after: auto; }
+  .esp-ev { font-size: 12pt; color: #444; text-transform: uppercase; letter-spacing: .05em; }
+  .esp-pag h1 { font-size: 40pt; margin: 4mm 0 2mm; }
+  .esp-info { font-size: 13pt; color: #333; margin-bottom: 8mm; border-bottom: 2px solid #000; padding-bottom: 3mm; }
+  .esp-pag ol { font-size: 16pt; line-height: 1.55; padding-left: 12mm; margin: 0; }
+  .esp-pag li span { font-size: 11pt; color: #555; }
+  .esp-rod { margin-top: 10mm; font-size: 9pt; color: #777; }
+}

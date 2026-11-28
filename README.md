@@ -115,6 +115,7 @@ Pode ser editada direto na planilha. Sexo vazio = misto. O quarto de cada pessoa
 
 ## Versões
 
+- **3.4.0**: botão **Exportar espelho** em cada quarto (folha A4 com os nomes, para imprimir ou salvar em PDF) e **Espelho de todos os quartos** (um quarto por página).
 - **3.3.0**: distribuição automática pergunta o **quarto do pastor** e deixa esse quarto de fora (o aparelho lembra a última escolha).
 - **3.2.0**: distribuição automática por **capela** (Capela de Cima, Capela de Baixo ou as duas) e com opção **só camas** ou **camas e colchões**;
   homens só em quartos/colchões masculinos e mulheres só nos femininos (colchões passam a ser separados por sexo, com o botão "Dividir colchões por sexo").

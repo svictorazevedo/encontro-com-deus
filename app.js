@@ -5,7 +5,7 @@
  */
 'use strict';
 
-const VERSAO = '3.3.0';
+const VERSAO = '3.4.0';
 const K = { cfg: 'encontro.cfg.v1', demo: 'encontro.demo.v1', fila: 'encontro.fila.v1', cache: 'encontro.cache.v1', local: 'encontro.local.v1', pastor: 'encontro.quartoPastor.v1' };
 const SITE = location.origin + location.pathname;
 
@@ -759,6 +759,7 @@ function renderQuartos() {
     }).join('')}
     <div class="cartao linha-botoes" style="margin-top:20px">
       <button class="btn" data-acao="novoQuarto">+ Novo quarto</button>
+      ${alocados ? '<button class="btn" data-acao="espelhoTodos">Espelho de todos os quartos</button>' : ''}
       ${alocados ? '<button class="btn perigo" data-acao="limparQuartos">Tirar todos dos quartos</button>' : ''}
     </div>`;
 }
@@ -777,7 +778,8 @@ async function abrirQuarto(nome) {
         <div class="muted peq">${esc([q.andar, q.ala, SEXO_TXT[q.sx], q.obs].filter(Boolean).join(' · '))}</div>
         <div class="q-cab"><span class="q-num">${ocs.length}<small>/${q.camas}</small></span>
           <span class="${livre < 0 ? 'txt-erro' : 'muted'}">${livre < 0 ? `${-livre} acima da capacidade` : livre === 0 ? 'Lotado' : `${livre} vaga(s)`}</span></div>
-        <button class="btn primario bloco" value="add">+ Adicionar pessoas</button>
+        <div class="linha-botoes"><button class="btn primario" value="add">+ Adicionar pessoas</button>
+          <button class="btn" value="espelho">Exportar espelho</button></div>
         <div class="ocupantes">${ocs.length ? ocs.map((p) => `
           <div class="ocupante">
             <button class="oc-nome" value="ficha:${p.linha}"><span class="avatar mini av-${p.cat}">${esc(iniciais(p.nome))}</span>
@@ -798,6 +800,7 @@ async function abrirQuarto(nome) {
     const v = respostaV(r);
     if (!v) return;
     if (v === 'add') { await adicionarAoQuarto(q); continue; }
+    if (v === 'espelho') { imprimirEspelho([q]); continue; }
     if (v.startsWith('rem:')) {
       const p = acharPessoa(v.slice(4));
       if (p) { atualizar(p, { [SIS.quarto]: '' }); toast(`${p.nome} saiu do ${q.nome}`, '', { rotulo: 'Desfazer', fn: () => atualizar(acharPessoaPorCodigo(p) || p, { [SIS.quarto]: q.nome }) }); }
@@ -1028,6 +1031,32 @@ async function dividirColchoes() {
     [colQ('quarto')]: 'Colchões femininos', [colQ('andar')]: q.andar, [colQ('ala')]: q.ala, [colQ('camas')]: String(f), [colQ('sexo')]: 'Feminino', [colQ('obs')]: q.obs,
   } });
   toast(`Colchões divididos: ${m} masculinos e ${f} femininos.`, 'ok');
+}
+
+/* Espelho do quarto: folha A4 com os nomes de quem está no quarto (para colar na porta).
+   Abre a impressão do aparelho, onde dá para imprimir ou "Salvar como PDF" e compartilhar. Um quarto por página. */
+function imprimirEspelho(qs) {
+  if (!qs.length) { toast('Nenhum quarto com pessoas.'); return; }
+  const oc = ocupacao();
+  const evento = esc(String(st.planilha || cfg.evento || 'Encontro com Deus').replace(/ - atualizada.*$/, ''));
+  const html = qs.map((q) => {
+    const ocs = ocupantesDe(q, oc);
+    const local = [listaCapelas().includes(q.andar) ? nomeCapela(q.andar) : q.andar, q.ala, q.sx ? SEXO_TXT[q.sx] : ''].filter(Boolean).join(' · ');
+    return `<section class="esp-pag">
+      <div class="esp-ev">${evento}</div>
+      <h1>${esc(q.nome)}</h1>
+      <div class="esp-info">${esc(local)}${local ? ' · ' : ''}${ocs.length} de ${q.camas} ${ehColchao(q) ? 'colchões' : 'camas'}</div>
+      ${ocs.length ? `<ol>${ocs.map((p) => `<li><b>${esc(p.nome)}</b>${p.cat && p.cat !== 'encontrista' ? ` <span>${esc(CATS[p.cat] || '')}</span>` : ''}</li>`).join('')}</ol>` : '<p>Quarto vazio.</p>'}
+      <div class="esp-rod">Gerado em ${esc(agora())}</div>
+    </section>`;
+  }).join('');
+  let el = document.getElementById('espelho');
+  if (!el) { el = document.createElement('div'); el.id = 'espelho'; document.body.appendChild(el); }
+  el.innerHTML = html;
+  document.body.classList.add('imprimindo');
+  const fim = () => { document.body.classList.remove('imprimindo'); el.innerHTML = ''; window.removeEventListener('afterprint', fim); };
+  window.addEventListener('afterprint', fim);
+  setTimeout(() => { try { window.print(); } catch { toast('Este aparelho não abriu a impressão.', 'erro'); } setTimeout(fim, 1500); }, 50);
 }
 
 async function novoQuarto() {
@@ -1679,6 +1708,7 @@ document.addEventListener('click', async (e) => {
     case 'desconectar': desconectar(); break;
     case 'distribuir': distribuir(); break;
     case 'dividirColchoes': dividirColchoes(); break;
+    case 'espelhoTodos': imprimirEspelho(listaQuartos().filter((q) => ocupantesDe(q).length)); break;
     case 'novoQuarto': novoQuarto(); break;
     case 'limparQuartos': limparQuartos(); break;
   }
