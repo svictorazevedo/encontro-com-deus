@@ -48,7 +48,7 @@ Outras opções (em Ajustes → Outras opções): abrir a planilha só no aparel
   - escolhe a capela (Cima, Baixo ou as duas) e se usa só camas ou camas e colchões;
   - homens só em quartos/colchões masculinos e mulheres só nos femininos;
   - mantém o discipulado ou a célula juntos (configurável), com opção de separar equipe de encontristas;
-  - usa os quartos mistos vazios depois e os colchões só por último (se escolhido); deixa a Cozinha de fora;
+  - usa os quartos mistos vazios depois e os colchões só por último (se escolhido); deixa a Cozinha e o quarto do pastor (escolhido na hora) de fora;
   - mostra uma prévia antes e oferece "Desfazer".
   Na recepção, o check-in já mostra o quarto ("Bem-vinda, Ana! · Quarto 03") e a ficha tem "Escolher/Trocar quarto".
 - **Ajustes**: conectar o aparelho (link de conexão), nome do aparelho/atendente, enviar o acesso para outro
@@ -115,6 +115,7 @@ Pode ser editada direto na planilha. Sexo vazio = misto. O quarto de cada pessoa
 
 ## Versões
 
+- **3.3.0**: distribuição automática pergunta o **quarto do pastor** e deixa esse quarto de fora (o aparelho lembra a última escolha).
 - **3.2.0**: distribuição automática por **capela** (Capela de Cima, Capela de Baixo ou as duas) e com opção **só camas** ou **camas e colchões**;
   homens só em quartos/colchões masculinos e mulheres só nos femininos (colchões passam a ser separados por sexo, com o botão "Dividir colchões por sexo").
 - **3.1.3**: importação casa pelo código do ingresso **ou** pelo nome (planilha sem código não duplica quem veio do site); reconhece coluna "Pagamento".

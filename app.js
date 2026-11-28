@@ -5,8 +5,8 @@
  */
 'use strict';
 
-const VERSAO = '3.2.0';
-const K = { cfg: 'encontro.cfg.v1', demo: 'encontro.demo.v1', fila: 'encontro.fila.v1', cache: 'encontro.cache.v1', local: 'encontro.local.v1' };
+const VERSAO = '3.3.0';
+const K = { cfg: 'encontro.cfg.v1', demo: 'encontro.demo.v1', fila: 'encontro.fila.v1', cache: 'encontro.cache.v1', local: 'encontro.local.v1', pastor: 'encontro.quartoPastor.v1' };
 const SITE = location.origin + location.pathname;
 
 /* ================= utilitários ================= */
@@ -900,12 +900,12 @@ async function escolherQuarto(p) {
   toast(`${p.nome} no ${q.nome}`, 'ok', { rotulo: 'Desfazer', fn: () => atualizar(acharPessoaPorCodigo(p) || p, { [SIS.quarto]: antes || '' }) });
 }
 
-function planejarDistribuicao({ quem, juntos, separar, capela, colchoes }) {
+function planejarDistribuicao({ quem, juntos, separar, capela, colchoes, pastor }) {
   const oc = ocupacao();
   const semSexoQ = [], mistosOcupados = [];
   const quartos = [];
   for (const q of listaQuartos()) {
-    if (q.cozinha) continue;
+    if (q.cozinha || (pastor && norm(q.nome) === norm(pastor))) continue; // Cozinha e quarto do pastor ficam de fora
     const colchao = ehColchao(q);
     if (colchao ? colchoes !== 'sim' : capela !== 'todas' && q.andar !== capela) continue;
     const ocs = ocupantesDe(q, oc);
@@ -958,20 +958,25 @@ async function distribuir() {
   const r = await folha({
     titulo: 'Distribuir automaticamente',
     corpo: `<div class="form">
-      <p class="muted" style="margin:0">Coloca quem está <b>sem quarto</b> nas vagas livres. Homens só em quartos e colchões masculinos, mulheres só nos femininos; quarto misto vazio passa a ser do sexo de quem entrar. Quem já tem quarto não muda. A Cozinha fica de fora.</p>
+      <p class="muted" style="margin:0">Coloca quem está <b>sem quarto</b> nas vagas livres. Homens só em quartos e colchões masculinos, mulheres só nos femininos; quarto misto vazio passa a ser do sexo de quem entrar. Quem já tem quarto não muda. A Cozinha e o quarto do pastor ficam de fora.</p>
       <div><div class="rotulo-grupo">Capela</div>${radios('capela', [...listaCapelas().map((a) => [a, nomeCapela(a)]), ['todas', 'As duas']], listaCapelas()[0] || 'todas')}</div>
       <div><div class="rotulo-grupo">Onde colocar</div>${radios('colchoes', [['nao', 'Só camas'], ['sim', 'Camas e colchões']], 'nao')}
         <div class="muted peq" style="margin-top:4px">Com colchões, eles só são usados depois que as camas acabarem.</div></div>
+      <label class="campo">Quarto do pastor (fica fora da distribuição)<select name="pastor"><option value="">Nenhum</option>${(() => {
+        const ultimo = norm(ler(K.pastor, ''));
+        return listaQuartos().filter((q) => !q.cozinha && !ehColchao(q)).map((q) => `<option value="${esc(q.nome)}" ${norm(q.nome) === ultimo ? 'selected' : ''}>${esc(q.nome)} · ${esc([listaCapelas().includes(q.andar) ? nomeCapela(q.andar) : q.andar, SEXO_TXT[q.sx]].filter(Boolean).join(' · '))}</option>`).join('');
+      })()}</select></label>
       <div><div class="rotulo-grupo">Quem distribuir</div>${radios('quem', [['todos', 'Todos os inscritos'], ['presentes', 'Só quem fez check-in']], 'todos')}</div>
       <div><div class="rotulo-grupo">Manter juntos no mesmo quarto</div>${radios('juntos', [['discipulador', 'Discipulado'], ['lider', 'Célula (líder)'], ['nenhum', 'Tanto faz']], 'discipulador')}</div>
       <label class="interruptor">Separar equipe de encontristas <input type="checkbox" name="separar"></label>
     </div>`,
     botoes: [{ v: 'ok', t: 'Ver prévia', cls: 'primario' }],
-    ler: (f) => ({ quem: f.quem.value, juntos: f.juntos.value, separar: f.separar.checked, capela: f.capela.value, colchoes: f.colchoes.value }),
+    ler: (f) => ({ quem: f.quem.value, juntos: f.juntos.value, separar: f.separar.checked, capela: f.capela.value, colchoes: f.colchoes.value, pastor: f.pastor.value }),
   });
   if (!r || r.v !== 'ok') return;
+  gravarLS(K.pastor, r.dados.pastor);
   const { plano, semVaga, semSexo, semSexoQ, mistosOcupados, total } = planejarDistribuicao(r.dados);
-  const ondeTxt = `${r.dados.capela === 'todas' ? 'As duas capelas' : nomeCapela(r.dados.capela)} · ${r.dados.colchoes === 'sim' ? 'camas e colchões' : 'só camas'}`;
+  const ondeTxt = `${r.dados.capela === 'todas' ? 'As duas capelas' : nomeCapela(r.dados.capela)} · ${r.dados.colchoes === 'sim' ? 'camas e colchões' : 'só camas'}${r.dados.pastor ? ' · ' + r.dados.pastor + ' reservado para o pastor' : ''}`;
   if (!total) { toast('Ninguém sem quarto para distribuir.'); return; }
   const porQuarto = new Map();
   for (const [p, nome] of plano) { if (!porQuarto.has(nome)) porQuarto.set(nome, []); porQuarto.get(nome).push(p); }
